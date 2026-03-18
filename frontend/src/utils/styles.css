@@ -1,0 +1,769 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================================
+   DESIGN SYSTEM - BASE STYLES
+   ========================================================================== */
+
+@layer base {
+  /* Typography */
+  * {
+    @apply antialiased;
+  }
+
+  html {
+    @apply scroll-smooth;
+  }
+
+  body {
+    @apply bg-white text-secondary-900 font-sans text-base leading-relaxed;
+  }
+
+  h1 {
+    @apply text-3xl font-bold tracking-tight text-secondary-900;
+  }
+
+  h2 {
+    @apply text-2xl font-bold tracking-tight text-secondary-900;
+  }
+
+  h3 {
+    @apply text-xl font-semibold text-secondary-900;
+  }
+
+  h4 {
+    @apply text-lg font-semibold text-secondary-900;
+  }
+
+  h5,
+  h6 {
+    @apply font-semibold text-secondary-900;
+  }
+
+  p {
+    @apply text-secondary-700;
+  }
+
+  a {
+    @apply text-primary-600 no-underline transition-colors duration-200 hover:text-primary-700;
+  }
+
+  button:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
+    @apply outline-none ring-2 ring-offset-2 ring-primary-500;
+  }
+
+  /* Form inputs */
+  input,
+  textarea,
+  select {
+    @apply rounded-md border border-secondary-300 px-3 py-2 text-base bg-white transition-colors duration-150;
+    @apply focus:border-primary-500 focus:ring-2 focus:ring-primary-200;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    @apply text-secondary-400;
+  }
+
+  input:disabled,
+  textarea:disabled,
+  select:disabled {
+    @apply bg-secondary-50 text-secondary-400 cursor-not-allowed;
+  }
+}
+
+/* ============================================================================
+   COMPONENT LAYER - REUSABLE COMPONENTS
+   ========================================================================== */
+
+@layer components {
+  /* Button styles */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md font-medium text-sm transition-colors duration-150 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed;
+  }
+
+  .btn-primary {
+    @apply bg-primary-600 text-white hover:bg-primary-700 active:bg-primary-800;
+  }
+
+  .btn-secondary {
+    @apply bg-secondary-200 text-secondary-900 hover:bg-secondary-300 active:bg-secondary-400;
+  }
+
+  .btn-outline {
+    @apply border-2 border-primary-600 text-primary-600 hover:bg-primary-50 active:bg-primary-100;
+  }
+
+  .btn-ghost {
+    @apply text-primary-600 hover:bg-primary-50 active:bg-primary-100;
+  }
+
+  .btn-danger {
+    @apply bg-error-500 text-white hover:bg-error-600 active:bg-error-700;
+  }
+
+  .btn-success {
+    @apply bg-success-600 text-white hover:bg-success-700 active:bg-success-800;
+  }
+
+  .btn-sm {
+    @apply px-3 py-1.5 text-xs;
+  }
+
+  .btn-lg {
+    @apply px-6 py-3 text-base;
+  }
+
+  /* Card styles */
+  .card {
+    @apply bg-white border border-secondary-200 rounded-lg shadow-sm transition-all duration-200;
+  }
+
+  .card:hover {
+    @apply shadow-md;
+  }
+
+  .card-header {
+    @apply border-b border-secondary-200 px-5 py-4;
+  }
+
+  .card-body {
+    @apply px-5 py-4;
+  }
+
+  .card-footer {
+    @apply border-t border-secondary-200 flex items-center justify-between px-5 py-3 bg-secondary-50;
+  }
+
+  /* Badge styles */
+  .badge {
+    @apply inline-flex items-center justify-center gap-1 px-3 py-1 rounded-full text-xs font-semibold;
+  }
+
+  .badge-primary {
+    @apply bg-primary-100 text-primary-700;
+  }
+
+  .badge-success {
+    @apply bg-success-100 text-success-700;
+  }
+
+  .badge-warning {
+    @apply bg-warning-100 text-warning-700;
+  }
+
+  .badge-error {
+    @apply bg-error-100 text-error-700;
+  }
+
+  .badge-neutral {
+    @apply bg-secondary-100 text-secondary-700;
+  }
+
+  /* Status indicators */
+  .status-indicator {
+    @apply inline-flex items-center gap-2 text-sm;
+  }
+
+  .status-dot {
+    @apply w-2 h-2 rounded-full;
+  }
+
+  /* Alert/Message styles */
+  .alert {
+    @apply rounded-lg border px-4 py-3 text-sm;
+  }
+
+  .alert-info {
+    @apply border-primary-200 bg-primary-50 text-primary-700;
+  }
+
+  .alert-success {
+    @apply border-success-200 bg-success-50 text-success-700;
+  }
+
+  .alert-warning {
+    @apply border-warning-200 bg-warning-50 text-warning-700;
+  }
+
+  .alert-error {
+    @apply border-error-200 bg-error-50 text-error-700;
+  }
+
+  /* Divider */
+  .divider {
+    @apply border-t border-secondary-200;
+  }
+
+  /* Text utilities */
+  .text-muted {
+    @apply text-secondary-600;
+  }
+
+  .text-light {
+    @apply text-secondary-400;
+  }
+
+  .text-strong {
+    @apply font-semibold text-secondary-900;
+  }
+
+  /* Container */
+  .container-centered {
+    @apply mx-auto max-w-6xl px-4;
+  }
+
+  /* Link styles */
+  .link {
+    @apply text-primary-600 hover:text-primary-700 cursor-pointer transition-colors;
+  }
+
+  .link-muted {
+    @apply text-secondary-500 hover:text-secondary-700;
+  }
+
+  /* Skeleton loading */
+  .skeleton {
+    @apply bg-secondary-200 rounded animate-pulse;
+  }
+
+  /* Hover effects */
+  .hover-card {
+    @apply transition-all duration-200 hover:shadow-lg hover:border-primary-200;
+  }
+
+  .hover-scale {
+    @apply transition-transform duration-200 hover:scale-105;
+  }
+
+  /* Focus states for accessibility */
+  .focus-ring {
+    @apply focus:ring-2 focus:ring-offset-2 focus:ring-primary-500;
+  }
+}
+
+/* ============================================================================
+   EXAM INTERFACE STYLES - SECURITY & OPTIMIZATION
+   ========================================================================== */
+
+/* Security features for exam pages */
+.exam-container {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+.exam-container * {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+/* Disable copy-paste for exam content */
+.exam-question,
+.exam-option {
+  user-select: none;
+  -webkit-user-select: none;
+  -o-user-select: none !important;
+  -moz-user-select: none !important;
+  -webkit-touch-callout: none;
+  -webkit-user-drag: none;
+  -webkit-user-modify: read-only;
+}
+
+/* Disable right-click context menu on exam */
+.exam-container {
+  context-menu: none;
+}
+
+/* Disable drag operations */
+.exam-question,
+.exam-option,
+.question-palette {
+  -webkit-user-drag: none;
+  -webkit-user-select: none;
+}
+
+/* Pointer events control */
+.exam-option button {
+  pointer-events: auto;
+}
+
+/* Smooth transitions for exam UI */
+.exam-container {
+  @apply transition-all duration-200;
+}
+
+/* ============================================================================
+   JEE EXAM INTERFACE STYLING
+   ========================================================================== */
+
+.jee-exam {
+  background: linear-gradient(135deg, #ffffff 0%, #f3f4f6 100%);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.jee-header {
+  @apply bg-white border-b border-secondary-200 shadow-sm;
+  padding: 12px 16px;
+}
+
+.jee-header-top {
+  @apply flex items-center justify-between;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.jee-logo {
+  @apply text-lg font-bold text-primary-700;
+  letter-spacing: 0.5px;
+}
+
+.jee-exam-meta {
+  @apply flex items-center gap-8 text-sm;
+}
+
+.jee-timer {
+  @apply flex items-center gap-2 font-semibold text-secondary-900;
+}
+
+.jee-timer.warning {
+  @apply text-warning-600;
+}
+
+.jee-timer.critical {
+  @apply text-error-600 animate-pulse;
+}
+
+.jee-content {
+  @apply flex-1 flex overflow-hidden;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 16px;
+  gap: 16px;
+}
+
+/* Question palette (left panel) */
+.question-palette {
+  @apply bg-white rounded-lg border border-secondary-200 shadow-sm overflow-y-auto;
+  width: 200px;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.palette-section {
+  @apply border-b border-secondary-200 last:border-b-0;
+}
+
+.palette-section-title {
+  @apply bg-secondary-50 px-3 py-2 text-xs font-semibold text-secondary-700 uppercase tracking-wider;
+}
+
+.palette-buttons {
+  @apply p-3 grid grid-cols-5 gap-2;
+}
+
+.question-btn {
+  @apply w-10 h-10 flex items-center justify-center rounded-md font-semibold text-xs cursor-pointer transition-all duration-150 border-2;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.question-btn-not-visited {
+  @apply border-secondary-300 bg-secondary-100 text-secondary-700 hover:bg-secondary-200;
+}
+
+.question-btn-answered {
+  @apply border-success-500 bg-success-100 text-success-700 hover:bg-success-200;
+}
+
+.question-btn-not-answered {
+  @apply border-error-500 bg-error-100 text-error-700 hover:bg-error-200;
+}
+
+.question-btn-marked-review {
+  @apply border-purple-500 bg-purple-100 text-purple-700 hover:bg-purple-200;
+}
+
+.question-btn-active {
+  @apply ring-2 ring-offset-0 ring-primary-400;
+}
+
+/* Main question area */
+.question-area {
+  @apply flex-1 bg-white rounded-lg border border-secondary-200 shadow-sm flex flex-col;
+  max-width: 600px;
+}
+
+.question-header {
+  @apply border-b border-secondary-200 px-6 py-4 bg-secondary-50;
+}
+
+.question-meta {
+  @apply flex items-center justify-between text-sm font-medium text-secondary-700;
+}
+
+.question-number {
+  @apply text-primary-700 font-bold;
+}
+
+.question-content {
+  @apply flex-1 px-6 py-6 overflow-y-auto;
+}
+
+.question-text {
+  @apply text-lg leading-relaxed text-secondary-900 mb-5;
+}
+
+.question-image {
+  @apply max-w-full h-auto rounded-md border border-secondary-200 my-4;
+}
+
+/* Options section */
+.options-container {
+  @apply space-y-3 mt-6;
+}
+
+.option-wrapper {
+  @apply flex items-start gap-3 p-4 rounded-lg border-2 border-secondary-300 cursor-pointer transition-all duration-150 hover:border-secondary-400 hover:bg-secondary-50;
+  user-select: none;
+}
+
+.option-wrapper.selected {
+  @apply border-primary-500 bg-primary-50;
+}
+
+.option-wrapper:focus-within {
+  @apply ring-2 ring-primary-400 ring-offset-0;
+}
+
+.option-input {
+  @apply w-4 h-4 mt-1 cursor-pointer;
+  margin-top: 4px;
+}
+
+.option-label {
+  @apply text-base text-secondary-900 flex-1 cursor-pointer font-medium;
+  user-select: none;
+}
+
+/* Navigation footer */
+.exam-footer {
+  @apply border-t border-secondary-200 bg-white px-6 py-4 flex items-center justify-between;
+}
+
+.nav-buttons {
+  @apply flex gap-3;
+}
+
+.question-counter {
+  @apply text-sm text-secondary-700;
+}
+
+/* ============================================================================
+   MHT-CET EXAM INTERFACE STYLING
+   ========================================================================== */
+
+.mhtcet-exam {
+  background: linear-gradient(180deg, #f9fafb 0%, #f3f4f6 100%);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.mhtcet-header {
+  @apply bg-white border-b-2 border-primary-600 shadow-md;
+  padding: 14px 20px;
+}
+
+.mhtcet-header-content {
+  @apply flex items-center justify-between;
+  max-width: 1000px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.mhtcet-title {
+  @apply text-base font-bold text-secondary-900;
+}
+
+.mhtcet-info {
+  @apply flex items-center gap-12 text-sm;
+}
+
+.mhtcet-timer {
+  @apply flex items-center gap-2 font-bold text-secondary-900;
+  min-width: 140px;
+}
+
+.mhtcet-timer.warning {
+  @apply text-warning-600;
+}
+
+.mhtcet-timer.critical {
+  @apply text-error-600 animate-pulse;
+}
+
+.mhtcet-content {
+  @apply flex-1 flex items-center justify-center px-4 py-6 overflow-y-auto;
+}
+
+.mhtcet-question-card {
+  @apply bg-white rounded-lg border border-secondary-200 shadow-md;
+  max-width: 700px;
+  width: 100%;
+}
+
+.mhtcet-question-header {
+  @apply bg-primary-50 border-b border-primary-200 px-6 py-4;
+}
+
+.mhtcet-question-number {
+  @apply text-sm font-bold text-primary-700;
+}
+
+.mhtcet-question-body {
+  @apply px-6 py-6;
+}
+
+.mhtcet-question-text {
+  @apply text-base leading-relaxed text-secondary-900 mb-6;
+}
+
+.mhtcet-options-area {
+  @apply space-y-3 mt-6;
+}
+
+.mhtcet-option {
+  @apply flex items-start gap-3 p-4 rounded-lg border-2 border-secondary-300 cursor-pointer transition-all duration-150 hover:bg-primary-50 hover:border-primary-400;
+  user-select: none;
+}
+
+.mhtcet-option.selected {
+  @apply border-primary-600 bg-primary-100;
+}
+
+.mhtcet-option-radio {
+  @apply w-5 h-5 mt-0.5 cursor-pointer;
+}
+
+.mhtcet-option-text {
+  @apply text-base text-secondary-900 flex-1 font-medium;
+  user-select: none;
+}
+
+.mhtcet-footer {
+  @apply bg-white border-t border-secondary-200 shadow-md;
+}
+
+.mhtcet-footer-content {
+  @apply flex items-center justify-between px-6 py-4;
+  max-width: 1000px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.mhtcet-nav-buttons {
+  @apply flex gap-3;
+}
+
+.mhtcet-question-info {
+  @apply text-sm text-secondary-700;
+}
+
+/* ============================================================================
+   DASHBOARD STYLING
+   ========================================================================== */
+
+.dashboard-header {
+  @apply mb-8;
+}
+
+.dashboard-title {
+  @apply text-3xl font-bold text-secondary-900 mb-2;
+}
+
+.dashboard-subtitle {
+  @apply text-lg text-secondary-600;
+}
+
+.stats-grid {
+  @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8;
+}
+
+.stat-card {
+  @apply card p-5 hover-card;
+}
+
+.stat-label {
+  @apply text-sm text-secondary-600 font-medium;
+}
+
+.stat-value {
+  @apply text-3xl font-bold text-primary-600 mt-2;
+}
+
+.stat-change {
+  @apply text-xs mt-2 font-medium;
+}
+
+.stat-change.positive {
+  @apply text-success-600;
+}
+
+.stat-change.negative {
+  @apply text-error-600;
+}
+
+.chart-container {
+  @apply card p-6 mb-6;
+}
+
+.chart-title {
+  @apply text-lg font-semibold text-secondary-900 mb-4;
+}
+
+.tests-grid {
+  @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4;
+}
+
+.test-card {
+  @apply card cursor-pointer transition-all duration-200 hover-scale;
+}
+
+.test-card:hover {
+  @apply shadow-lg;
+}
+
+/* ============================================================================
+   NAVBAR STYLING
+   ========================================================================== */
+
+.navbar {
+  @apply sticky top-0 z-50 w-full border-b border-secondary-200 bg-white shadow-sm;
+}
+
+.navbar-content {
+  @apply flex items-center justify-between px-4 py-3;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.navbar-logo {
+  @apply text-xl font-bold text-primary-700 flex items-center gap-2;
+}
+
+.navbar-nav {
+  @apply flex items-center gap-6;
+}
+
+.navbar-link {
+  @apply text-sm font-medium text-secondary-700 hover:text-primary-700 transition-colors;
+}
+
+.navbar-link.active {
+  @apply text-primary-700 border-b-2 border-primary-700 pb-3;
+}
+
+.navbar-user {
+  @apply flex items-center gap-3;
+}
+
+.navbar-avatar {
+  @apply w-8 h-8 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center font-semibold text-sm;
+}
+
+/* ============================================================================
+   MODAL/DIALOG STYLING
+   ========================================================================== */
+
+.modal-overlay {
+  @apply fixed inset-0 bg-black/30 flex items-center justify-center z-50;
+  backdrop-filter: blur(2px);
+}
+
+.modal-content {
+  @apply bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto;
+}
+
+.modal-header {
+  @apply flex items-center justify-between border-b border-secondary-200 px-6 py-4;
+}
+
+.modal-title {
+  @apply text-xl font-bold text-secondary-900;
+}
+
+.modal-close {
+  @apply text-secondary-400 hover:text-secondary-600 cursor-pointer;
+}
+
+.modal-body {
+  @apply px-6 py-4;
+}
+
+.modal-footer {
+  @apply border-t border-secondary-200 px-6 py-4 flex items-center justify-end gap-3 bg-secondary-50;
+}
+
+/* ============================================================================
+   RESPONSIVE UTILITIES
+   ========================================================================== */
+
+@media (max-width: 768px) {
+  .jee-content {
+    @apply flex-col;
+  }
+
+  .question-palette {
+    @apply w-full;
+    max-height: 150px;
+  }
+
+  .question-area {
+    @apply max-w-full;
+  }
+
+  .jee-exam-meta {
+    @apply flex-col gap-3;
+  }
+
+  .mhtcet-info {
+    @apply flex-col gap-6;
+  }
+}
+
+/* ============================================================================
+   PRINT STYLES
+   ========================================================================== */
+
+@media print {
+  .exam-container {
+    @apply hidden;
+  }
+}
+
+/* ============================================================================
+   ANIMATION & TRANSITIONS
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+

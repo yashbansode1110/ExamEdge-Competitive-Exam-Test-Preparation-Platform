@@ -1,0 +1,17 @@
+{
+  "name": "examedge",
+  "private": true,
+  "version": "1.0.0",
+  "description": "ExamEdge — Competitive Exam Test Preparation Platform (MERN + AI microservice)",
+  "scripts": {
+    "dev": "echo \"Run separately: cd backend && npm run dev; cd frontend && npm run dev\"",
+    "build": "echo \"Run separately: cd backend && npm run start; cd frontend && npm run build\"",
+    "start": "echo \"Run separately: cd backend && npm run start\"",
+    "docker:up": "docker compose up --build",
+    "docker:down": "docker compose down -v"
+  },
+  "engines": {
+    "node": ">=20.10.0"
+  }
+}
+
