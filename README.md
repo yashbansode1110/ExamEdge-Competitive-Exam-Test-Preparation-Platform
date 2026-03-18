@@ -287,38 +287,6 @@ Output
 
 * Weak topics
 * Recommended practice questions
-
----
-
-## 10 AI Doubt Solving System
-
-Students can ask doubts related to questions.
-
-Features
-
-* Context retrieval
-* Similar question search
-* Step-by-step explanation generation
-
-Technology
-
-* RAG architecture
-* FAISS vector search
-* LLM integration
-
----
-
-## 11 Leaderboard and Gamification
-
-Encourages consistent practice.
-
-Features
-
-* Weekly leaderboard
-* XP points
-* Daily streak tracking
-* Achievement badges
-
 ---
 
 ## 12 Parent Dashboard
