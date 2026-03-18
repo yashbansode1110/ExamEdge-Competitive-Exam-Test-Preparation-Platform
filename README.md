@@ -289,7 +289,7 @@ Output
 * Recommended practice questions
 ---
 
-## 12 Parent Dashboard
+## 10 Parent Dashboard
 
 Allows parents to track student performance.
 
@@ -302,7 +302,7 @@ Displays
 
 ---
 
-## 13 Admin Panel
+## 11 Admin Panel
 
 Platform management interface.
 
@@ -440,18 +440,6 @@ uvicorn main:app --reload --port 8001
 
 ---
 
-### AI Doubt Solver
-
-```
-cd ai-services/doubt-solver-service
-python -m venv .venv
-.\.venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8002
-```
-
----
-
 ### Frontend
 
 ```
@@ -490,13 +478,3 @@ Possible enhancements
 * Adaptive difficulty tests
 
 ---
-
-# License
-
-This project is intended for educational purposes and academic submission.
-
----
-
-# Author
-
-Developed as a final year project for competitive exam preparation platform.
