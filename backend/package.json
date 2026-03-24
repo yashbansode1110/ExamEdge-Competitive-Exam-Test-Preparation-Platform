@@ -1,0 +1,30 @@
+{
+  "name": "examedge-backend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "dev": "node server.js",
+    "dev:watch": "node --watch server.js",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "bcrypt": "latest",
+    "compression": "latest",
+    "cors": "latest",
+    "dotenv": "latest",
+    "express": "latest",
+    "express-rate-limit": "latest",
+    "helmet": "latest",
+    "hpp": "latest",
+    "jsonwebtoken": "latest",
+    "mongoose": "^8.23.0",
+    "morgan": "latest",
+    "zod": "latest"
+  },
+  "engines": {
+    "node": ">=20.10.0"
+  }
+}
+
