@@ -7,11 +7,11 @@ import hpp from "hpp";
 
 import { apiLimiter } from "./middleware/rateLimiter.js";
 import { errorHandler } from "./middleware/errorHandler.js";
-
 import { authRoutes } from "./routes/authRoutes.js";
 import { questionRoutes } from "./routes/questionRoutes.js";
 import { testRoutes } from "./routes/testRoutes.js";
 import { analyticsRoutes } from "./routes/analyticsRoutes.js";
+import { adminTestRoutes } from "./routes/adminTestRoutes.js";
 import { authMiddleware } from "./middleware/authMiddleware.js";
 import { roleMiddleware } from "./middleware/roleMiddleware.js";
 import { adminCreateQuestion, adminDeleteQuestion, adminUpdateQuestion } from "./controllers/questionController.js";
@@ -55,6 +55,10 @@ app.put("/api/admin/questions/:id", authMiddleware(), roleMiddleware(["admin"]),
 app.delete("/api/admin/questions/:id", authMiddleware(), roleMiddleware(["admin"]), adminDeleteQuestion);
 app.use("/api/tests", testRoutes);
 app.use("/api/analytics", analyticsRoutes);
+
+app.use("/admin/tests", adminTestRoutes);
+app.use("/api/admin/tests", adminTestRoutes);
+
 
 app.use(errorHandler);
 

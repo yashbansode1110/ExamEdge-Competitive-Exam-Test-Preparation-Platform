@@ -32,6 +32,18 @@ npm install
 npm run dev
 ```
 
+### Demo data (needed for UI to work)
+Fresh Mongo starts with `0` tests/questions, so the frontend’s `/tests` and exam flow will be empty until you seed demo data.
+
+```bash
+cd backend
+npm run seed:demo
+```
+
+Demo credentials:
+- Student: `demo.student@examedge.local` / `DemoPassword123!`
+- Admin: `demo.admin@examedge.local` / `DemoPassword123!`
+
 ### AI services
 ```bash
 cd ai-services/weak-topic-service

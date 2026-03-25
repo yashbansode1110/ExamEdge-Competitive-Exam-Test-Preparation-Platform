@@ -20,9 +20,15 @@ export function notFound(message, code) {
 }
 
 export function errorHandler(err, _req, res, _next) {
-  const status = err?.statusCode && Number.isInteger(err.statusCode) ? err.statusCode : 500;
-  const code = err?.code || "INTERNAL_ERROR";
-  const message = status >= 500 ? "Internal server error" : err?.message || "Request failed";
+  const isZod = err?.name === "ZodError" || err?.constructor?.name === "ZodError";
+  const zodMessage =
+    Array.isArray(err?.issues) && err.issues.length
+      ? err.issues[0]?.message
+      : err?.message || "Validation failed";
+
+  const status = isZod ? 400 : err?.statusCode && Number.isInteger(err.statusCode) ? err.statusCode : 500;
+  const code = isZod ? "VALIDATION_ERROR" : err?.code || "INTERNAL_ERROR";
+  const message = status >= 500 ? "Internal server error" : zodMessage;
 
   if (status >= 500) {
     // eslint-disable-next-line no-console

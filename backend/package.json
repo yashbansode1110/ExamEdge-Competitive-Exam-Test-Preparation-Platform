@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "node server.js",
     "dev:watch": "node --watch server.js",
+    "seed:demo": "node scripts/seedDemo.js",
     "start": "node server.js"
   },
   "dependencies": {
@@ -21,10 +22,10 @@
     "jsonwebtoken": "latest",
     "mongoose": "^8.23.0",
     "morgan": "latest",
+    "openai": "^6.32.0",
     "zod": "latest"
   },
   "engines": {
     "node": ">=20.10.0"
   }
 }
-

@@ -7,6 +7,69 @@ import { badRequest, notFound } from "../middleware/errorHandler.js";
 const PUBLIC_SELECT =
   "exam subject chapter topic subtopic type difficulty text latex statement options tags source year isActive createdAt";
 
+const StatementBlockSchema = z.object({
+  kind: z.enum(["TEXT", "LATEX"]),
+  value: z.string().min(1)
+});
+
+const OptionSchema = z.object({
+  key: z.string().min(1),
+  text: z.string().min(1)
+});
+
+const SolutionStepSchema = z.object({
+  title: z.string().optional().default(""),
+  blocks: z.array(StatementBlockSchema).default([])
+});
+
+const SolutionSchema = z.object({
+  finalAnswerText: z.string().optional().default(""),
+  steps: z.array(SolutionStepSchema).optional().default([])
+});
+
+const AdminQuestionCreateSchema = z
+  .object({
+    exam: z.string().min(1),
+    subject: z.string().min(1),
+    chapter: z.string().min(1),
+    topic: z.string().min(1),
+    subtopic: z.string().optional().default(""),
+
+    type: z.enum(["MCQ", "NUMERICAL"]),
+    difficulty: z.coerce.number().int().min(1).max(5),
+
+    text: z.string().min(1),
+    latex: z.boolean().optional().default(false),
+    statement: z.array(StatementBlockSchema).optional(),
+
+    // MCQ-specific fields
+    options: z.array(OptionSchema).optional(),
+    correctOptionKey: z.string().optional(),
+
+    // NUMERICAL-specific fields
+    numericalAnswer: z.coerce.number().optional(),
+
+    solution: SolutionSchema.optional(),
+    tags: z.array(z.string().min(1)).optional().default([]),
+    source: z.string().optional().default(""),
+    year: z.coerce.number().int().optional(),
+    isActive: z.boolean().optional().default(true)
+  })
+  .superRefine((v, ctx) => {
+    if (v.type === "MCQ") {
+      const keys = (v.options || []).map((o) => o.key);
+      if (!v.options || v.options.length < 2) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "MCQ requires `options` with at least 2 items." });
+      if (!v.correctOptionKey || !keys.includes(v.correctOptionKey)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "`correctOptionKey` must match one of the option keys." });
+      }
+    }
+    if (v.type === "NUMERICAL") {
+      if (v.numericalAnswer == null || !Number.isFinite(Number(v.numericalAnswer))) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "NUMERICAL requires `numericalAnswer` as a number." });
+      }
+    }
+  });
+
 function computeContentHash({ exam, subject, chapter, topic, type, text, statement, options, correctOptionKey, numericalAnswer, latex }) {
   const effectiveStatement =
     Array.isArray(statement) && statement.length
@@ -73,7 +136,7 @@ export async function getByIds(req, res, next) {
 
 export async function adminCreateQuestion(req, res, next) {
   try {
-    const body = req.body; // validated at route layer (zod there if you extend)
+    const body = AdminQuestionCreateSchema.parse(req.body);
     const contentHash = computeContentHash({
       exam: body.exam,
       subject: body.subject,
