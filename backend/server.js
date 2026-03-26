@@ -1,9 +1,10 @@
 import dotenv from "dotenv";
 import http from "http";
-import { app } from "./app.js";
 import { connectMongoWithRetry } from "./config/database.js";
 
 dotenv.config({ path: new URL("./.env", import.meta.url) });
+
+const { app } = await import("./app.js");
 
 const PORT = Number(process.env.PORT || 4000);
 const MONGO_URI = process.env.MONGO_URI;

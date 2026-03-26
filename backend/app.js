@@ -9,6 +9,7 @@ import { apiLimiter } from "./middleware/rateLimiter.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { authRoutes } from "./routes/authRoutes.js";
 import { questionRoutes } from "./routes/questionRoutes.js";
+import { aiGenerationRoutes } from "./routes/aiGenerationRoutes.js";
 import { testRoutes } from "./routes/testRoutes.js";
 import { analyticsRoutes } from "./routes/analyticsRoutes.js";
 import { adminTestRoutes } from "./routes/adminTestRoutes.js";
@@ -53,6 +54,7 @@ app.use("/api/questions", questionRoutes);
 app.post("/api/admin/questions", authMiddleware(), roleMiddleware(["admin"]), adminCreateQuestion);
 app.put("/api/admin/questions/:id", authMiddleware(), roleMiddleware(["admin"]), adminUpdateQuestion);
 app.delete("/api/admin/questions/:id", authMiddleware(), roleMiddleware(["admin"]), adminDeleteQuestion);
+app.use("/api", aiGenerationRoutes);
 app.use("/api/tests", testRoutes);
 app.use("/api/analytics", analyticsRoutes);
 

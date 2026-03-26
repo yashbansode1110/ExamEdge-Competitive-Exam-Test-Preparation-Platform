@@ -47,7 +47,10 @@ const QuestionSchema = new Schema(
       steps: { type: [SolutionStepSchema], default: [], select: false }
     },
     tags: { type: [String], default: [], index: true },
-    source: { type: String, default: "" },
+    // Tracks where a question came from.
+    // New values: "manual" | "ai"
+    // Legacy values may exist in existing databases (e.g. "admin-ui" / empty).
+    source: { type: String, default: "manual", enum: ["manual", "ai", "admin-ui", "seedDemo", ""] },
     year: { type: Number, default: undefined, index: true },
     isActive: { type: Boolean, default: true, index: true },
     contentHash: { type: String, required: true, index: true }
