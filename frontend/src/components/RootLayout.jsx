@@ -41,6 +41,12 @@ export function RootLayout() {
 
   if (user) {
     links.push({
+      href: "/profile",
+      label: "Profile",
+      active: location.pathname.startsWith("/profile"),
+    });
+
+    links.push({
       href: "/select-test",
       label: "Select Test",
       active: location.pathname.startsWith("/select-test"),

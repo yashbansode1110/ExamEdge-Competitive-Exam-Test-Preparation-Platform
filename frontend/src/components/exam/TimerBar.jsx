@@ -13,14 +13,23 @@ function msLeft(endsAt) {
   return Math.max(0, t);
 }
 
-export function TimerBar({ endsAt }) {
+/**
+ * @param {{ endsAt?: string | Date | null, secondsLeft?: number | null }} props
+ * When `secondsLeft` is provided (updates each second from parent), it drives the display.
+ * Otherwise `endsAt` is used with an internal tick.
+ */
+export function TimerBar({ endsAt, secondsLeft }) {
   const [tick, setTick] = useState(0);
   useEffect(() => {
+    if (secondsLeft != null) return;
     const id = setInterval(() => setTick((x) => x + 1), 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [secondsLeft, endsAt]);
 
-  const left = useMemo(() => (endsAt ? msLeft(endsAt) : 0), [endsAt, tick]);
+  const left = useMemo(() => {
+    if (typeof secondsLeft === "number") return Math.max(0, secondsLeft) * 1000;
+    return endsAt ? msLeft(endsAt) : 0;
+  }, [endsAt, secondsLeft, tick]);
   const warning = left <= 10 * 60 * 1000; // 10 minutes
   const critical = left <= 60 * 1000; // 1 minute
 

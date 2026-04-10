@@ -13,9 +13,11 @@ import { aiGenerationRoutes } from "./routes/aiGenerationRoutes.js";
 import { testRoutes } from "./routes/testRoutes.js";
 import { analyticsRoutes } from "./routes/analyticsRoutes.js";
 import { adminTestRoutes } from "./routes/adminTestRoutes.js";
+import { adminCheatingRoutes, cheatingRoutes } from "./routes/cheatingRoutes.js";
+import { testSessionRoutes } from "./routes/testSessionRoutes.js";
 import { authMiddleware } from "./middleware/authMiddleware.js";
 import { roleMiddleware } from "./middleware/roleMiddleware.js";
-import { adminCreateQuestion, adminDeleteQuestion, adminUpdateQuestion } from "./controllers/questionController.js";
+import { adminBulkCreateQuestions, adminCreateQuestion, adminDeleteQuestion, adminUpdateQuestion } from "./controllers/questionController.js";
 
 export const app = express();
 
@@ -43,6 +45,7 @@ app.get("/api/health", (_req, res) => {
 app.use("/auth", authRoutes);
 app.use("/questions", questionRoutes);
 app.post("/admin/questions", authMiddleware(), roleMiddleware(["admin"]), adminCreateQuestion);
+app.post("/admin/questions/bulk", authMiddleware(), roleMiddleware(["admin"]), adminBulkCreateQuestions);
 app.put("/admin/questions/:id", authMiddleware(), roleMiddleware(["admin"]), adminUpdateQuestion);
 app.delete("/admin/questions/:id", authMiddleware(), roleMiddleware(["admin"]), adminDeleteQuestion);
 app.use("/tests", testRoutes);
@@ -52,11 +55,15 @@ app.use("/analytics", analyticsRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/questions", questionRoutes);
 app.post("/api/admin/questions", authMiddleware(), roleMiddleware(["admin"]), adminCreateQuestion);
+app.post("/api/admin/questions/bulk", authMiddleware(), roleMiddleware(["admin"]), adminBulkCreateQuestions);
 app.put("/api/admin/questions/:id", authMiddleware(), roleMiddleware(["admin"]), adminUpdateQuestion);
 app.delete("/api/admin/questions/:id", authMiddleware(), roleMiddleware(["admin"]), adminDeleteQuestion);
 app.use("/api", aiGenerationRoutes);
 app.use("/api/tests", testRoutes);
+app.use("/api/test-sessions", testSessionRoutes);
 app.use("/api/analytics", analyticsRoutes);
+app.use("/api/cheating", cheatingRoutes);
+app.use("/api/admin/cheating-logs", adminCheatingRoutes);
 
 app.use("/admin/tests", adminTestRoutes);
 app.use("/api/admin/tests", adminTestRoutes);

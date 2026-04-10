@@ -6,6 +6,7 @@ import { Card, CardBody } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { Alert } from "../components/ui/Alert";
 import { TestCard } from "../components/dashboard/TestCard";
+import { Modal } from "../components/ui/Modal";
 
 function normalizeExam(examValue) {
   const v = String(examValue || "").toUpperCase();
@@ -22,6 +23,14 @@ export function TestSelectionPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all"); // all | JEE Main | MHT-CET
+  const [selectedTest, setSelectedTest] = useState(null);
+  const [startBusy, setStartBusy] = useState(false);
+
+  const pageSessionKey = useMemo(() => `examedge_page_session_${Date.now()}`, []);
+  const pageSessionId = useMemo(
+    () => (crypto?.randomUUID?.() || `${Date.now()}_${Math.random().toString(16).slice(2)}`).toString(),
+    [pageSessionKey]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -125,7 +134,8 @@ export function TestSelectionPage() {
               difficulty={t.difficulty || "Easy"}
               description={t.description || ""}
               status={t.status || "available"}
-              onClick={() => nav(`/exam/${t._id}`)}
+              onClick={() => setSelectedTest(t)}
+              onStart={() => setSelectedTest(t)}
             />
           ))}
         </div>
@@ -136,6 +146,44 @@ export function TestSelectionPage() {
           </CardBody>
         </Card>
       )}
+
+      <Modal
+        isOpen={!!selectedTest}
+        onClose={() => !startBusy && setSelectedTest(null)}
+        title="Start Test"
+        onSubmit={async () => {
+          if (!selectedTest || !accessToken) return;
+          setStartBusy(true);
+          setError("");
+          try {
+            const data = await apiFetch("/api/test-sessions/start", {
+              method: "POST",
+              token: accessToken,
+              body: {
+                testId: selectedTest._id,
+                sessionId: pageSessionId
+              }
+            });
+            try {
+              localStorage.setItem(`examedge_attempt_session_${data.testSessionId}`, pageSessionId);
+            } catch {
+              // ignore storage failures
+            }
+            setSelectedTest(null);
+            nav(`/exam/${data.testSessionId}`);
+          } catch (e) {
+            setError(e.message || "Failed to start test");
+          } finally {
+            setStartBusy(false);
+          }
+        }}
+        submitLabel={startBusy ? "Starting..." : "Start"}
+        closeLabel="Cancel"
+      >
+        <p className="text-sm text-secondary-700">
+          Are you sure you want to start this test? Timer will begin immediately.
+        </p>
+      </Modal>
     </div>
   );
 }

@@ -5,10 +5,11 @@ import { Button } from "../components/ui/Button";
 import { Alert } from "../components/ui/Alert";
 import { AdminQuestionsPage } from "./AdminQuestionsPage.jsx";
 import { AdminTestsPage } from "./AdminTestsPage.jsx";
+import { AdminCheatingLogs } from "./AdminCheatingLogs.jsx";
 
 export function AdminPanelPage() {
   const { accessToken, user } = useSelector((s) => s.auth);
-  const [tab, setTab] = useState("questions"); // questions | tests
+  const [tab, setTab] = useState("questions"); // questions | tests | cheating
 
   const isAdmin = String(user?.role || "").toLowerCase().includes("admin");
 
@@ -50,11 +51,16 @@ export function AdminPanelPage() {
         <Button type="button" variant={tab === "tests" ? "primary" : "outline"} onClick={() => setTab("tests")}>
           Tests
         </Button>
+        <Button type="button" variant={tab === "cheating" ? "primary" : "outline"} onClick={() => setTab("cheating")}>
+          Cheating Logs
+        </Button>
       </div>
 
       <Card>
         <CardBody className="p-6">
-          {tab === "questions" ? <AdminQuestionsPage /> : <AdminTestsPage />}
+          {tab === "questions" ? <AdminQuestionsPage /> : null}
+          {tab === "tests" ? <AdminTestsPage /> : null}
+          {tab === "cheating" ? <AdminCheatingLogs /> : null}
         </CardBody>
       </Card>
     </div>

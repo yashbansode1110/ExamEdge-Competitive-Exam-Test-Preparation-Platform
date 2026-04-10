@@ -14,7 +14,7 @@
     "bcrypt": "latest",
     "compression": "latest",
     "cors": "latest",
-    "dotenv": "latest",
+    "dotenv": "^17.4.1",
     "express": "latest",
     "express-rate-limit": "latest",
     "helmet": "latest",
@@ -23,6 +23,7 @@
     "mongoose": "^8.23.0",
     "morgan": "latest",
     "openai": "^6.32.0",
+    "pdfkit": "^0.18.0",
     "zod": "latest"
   },
   "engines": {

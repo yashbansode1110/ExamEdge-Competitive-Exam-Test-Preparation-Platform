@@ -44,6 +44,27 @@ const SectionStateSchema = new Schema(
   { _id: false }
 );
 
+const EvaluatedResponseSchema = new Schema(
+  {
+    questionId: { type: Schema.Types.ObjectId, ref: "Question", required: true },
+    selectedOption: { type: Schema.Types.Mixed, default: undefined },
+    isCorrect: { type: Boolean, required: true },
+    marksAwarded: { type: Number, required: true },
+    timeTaken: { type: Number, default: 0, min: 0 }
+  },
+  { _id: false }
+);
+
+const SectionStatSchema = new Schema(
+  {
+    sectionName: { type: String, required: true },
+    correct: { type: Number, default: 0 },
+    total: { type: Number, default: 0 },
+    accuracy: { type: Number, default: 0 }
+  },
+  { _id: false }
+);
+
 const TestAttemptSchema = new Schema(
   {
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
@@ -65,8 +86,16 @@ const TestAttemptSchema = new Schema(
     networkEvents: { type: [NetworkEventSchema], default: [] },
     sections: { type: [SectionStateSchema], default: [] },
     currentSectionId: { type: String, default: "" },
+    responses: { type: [EvaluatedResponseSchema], default: [] },
     score: { type: Number, default: 0 },
+    totalMarks: { type: Number, default: 0 },
     accuracy: { type: Number, default: 0 },
+    correctCount: { type: Number, default: 0 },
+    wrongCount: { type: Number, default: 0 },
+    unattemptedCount: { type: Number, default: 0 },
+    sectionStats: { type: [SectionStatSchema], default: [] },
+    timeUsed: { type: Number, default: 0, min: 0 },
+    rank: { type: Number, default: 0, min: 0 },
     breakdown: { type: Schema.Types.Mixed, default: {} }
   },
   { timestamps: true }

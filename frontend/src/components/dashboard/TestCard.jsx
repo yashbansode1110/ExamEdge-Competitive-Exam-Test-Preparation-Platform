@@ -12,6 +12,7 @@ export function TestCard({
   difficulty,
   description,
   onClick,
+  onStart,
   status = "available", // available | attempted | completed
 }) {
   const statusColors = {
@@ -78,6 +79,19 @@ export function TestCard({
         {description && (
           <p className="text-sm text-secondary-600">{description}</p>
         )}
+
+        <div className="mt-4 pt-3 border-t border-secondary-200">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onStart?.();
+            }}
+            className="btn btn-primary w-full"
+          >
+            Start Test
+          </button>
+        </div>
       </div>
     </div>
   );

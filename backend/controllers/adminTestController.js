@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { z } from "zod";
 import { Test } from "../models/Test.js";
+import { Question } from "../models/Question.js";
 import { badRequest, notFound } from "../middleware/errorHandler.js";
 
 const MarkingSchema = z
@@ -69,6 +70,60 @@ function aggregateSubjectQuestionCounts(sections) {
   return out;
 }
 
+function normalizeSubjectKey(subject) {
+  const raw = String(subject || "").trim();
+  const key = raw.toLowerCase();
+  if (key === "math" || key === "mathematics") return "mathematics";
+  return key;
+}
+
+function subjectRegex(subject) {
+  const key = normalizeSubjectKey(subject);
+  if (key === "mathematics") return /^(mathematics|math)$/i;
+  return new RegExp(`^${String(subject || "").trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i");
+}
+
+async function validateAndPickQuestions({ exam, subjectCounts }) {
+  const selectedIdsBySubject = {};
+  const selectedQuestionIds = [];
+
+  for (const [subject, countRaw] of Object.entries(subjectCounts || {})) {
+    const count = Number(countRaw || 0);
+    if (count <= 0) continue;
+
+    const available = await Question.countDocuments({
+      isActive: true,
+      exam: { $regex: `^${String(exam || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" },
+      subject: subjectRegex(subject)
+    });
+    if (available < count) {
+      throw badRequest(`Not enough questions available for ${subject}`, "INSUFFICIENT_QUESTIONS");
+    }
+
+    const rows = await Question.aggregate([
+      {
+        $match: {
+          isActive: true,
+          exam: { $regex: `^${String(exam || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" },
+          subject: subjectRegex(subject)
+        }
+      },
+      { $sample: { size: count } },
+      { $project: { _id: 1 } }
+    ]);
+
+    if (rows.length !== count) {
+      throw badRequest(`Not enough questions available for ${subject}`, "INSUFFICIENT_QUESTIONS");
+    }
+
+    const ids = rows.map((r) => r._id.toString());
+    selectedIdsBySubject[subject] = ids;
+    selectedQuestionIds.push(...ids);
+  }
+
+  return { selectedQuestionIds, selectedIdsBySubject };
+}
+
 export async function adminCreateTest(req, res, next) {
   try {
     const body = z
@@ -105,10 +160,15 @@ export async function adminCreateTest(req, res, next) {
     if (!durationMsComputed || durationMsComputed < 60_000) throw badRequest("Invalid computed test duration", "INVALID_DURATION");
 
     const marking = body.marking ?? { mode: "UNIFORM_NEGATIVE", correct: 1, wrong: 0, unanswered: 0, weights: {} };
+    const autoSelection = await validateAndPickQuestions({ exam: body.exam, subjectCounts });
     const blueprint = {
       subjectQuestionCounts: body.blueprint?.subjectQuestionCounts && Object.keys(body.blueprint.subjectQuestionCounts).length ? body.blueprint.subjectQuestionCounts : subjectCounts,
       difficultyDistribution: body.blueprint?.difficultyDistribution ?? {},
-      topicFilters: body.blueprint?.topicFilters ?? {}
+      topicFilters: {
+        ...(body.blueprint?.topicFilters ?? {}),
+        __preselectedQuestionIds: autoSelection.selectedQuestionIds,
+        __preselectedQuestionIdsBySubject: autoSelection.selectedIdsBySubject
+      }
     };
 
     const test = await Test.create({
@@ -162,10 +222,15 @@ export async function adminUpdateTest(req, res, next) {
     if (totalQuestionsComputed < 1) throw badRequest("Test must include question counts", "NO_BLUEPRINT");
 
     const marking = body.marking ?? { mode: "UNIFORM_NEGATIVE", correct: 1, wrong: 0, unanswered: 0, weights: {} };
+    const autoSelection = await validateAndPickQuestions({ exam: body.exam, subjectCounts });
     const blueprint = {
       subjectQuestionCounts: body.blueprint?.subjectQuestionCounts && Object.keys(body.blueprint.subjectQuestionCounts).length ? body.blueprint.subjectQuestionCounts : subjectCounts,
       difficultyDistribution: body.blueprint?.difficultyDistribution ?? {},
-      topicFilters: body.blueprint?.topicFilters ?? {}
+      topicFilters: {
+        ...(body.blueprint?.topicFilters ?? {}),
+        __preselectedQuestionIds: autoSelection.selectedQuestionIds,
+        __preselectedQuestionIdsBySubject: autoSelection.selectedIdsBySubject
+      }
     };
 
     const hit = await Test.findByIdAndUpdate(

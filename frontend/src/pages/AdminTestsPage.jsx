@@ -4,29 +4,57 @@ import { apiFetch } from "../services/api.js";
 import { Card, CardBody } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { Alert } from "../components/ui/Alert";
+import { SubjectCard } from "../components/admin/SubjectCard.jsx";
 
-const defaultSections = [
-  {
-    sectionId: "S1_MATH",
-    name: "Mathematics",
-    order: 0,
-    durationMinutes: 30,
-    subjects: ["Mathematics"],
-    questionCountBySubject: { Mathematics: 3 },
-    allowedQuestionTypes: ["MCQ"],
-    hardWindowEnforced: true
+const PRESETS = {
+  JEE_PCM: {
+    label: "JEE Main (PCM)",
+    exam: "JEE Main (PCM)",
+    durationMinutes: 180,
+    subjectCounts: { Physics: 25, Chemistry: 25, Mathematics: 25 },
+    marking: { mode: "UNIFORM_NEGATIVE", correct: 4, wrong: 1, unanswered: 0 }
   },
-  {
-    sectionId: "S2_PHYSICS",
-    name: "Physics",
-    order: 1,
-    durationMinutes: 30,
-    subjects: ["Physics"],
-    questionCountBySubject: { Physics: 3 },
+  MHT_CET_PCM: {
+    label: "MHT-CET (PCM)",
+    exam: "MHT-CET (PCM)",
+    durationMinutes: 180,
+    subjectCounts: { Physics: 50, Chemistry: 50, Mathematics: 50 },
+    marking: { mode: "UNIFORM_NEGATIVE", correct: 1, wrong: 0, unanswered: 0 }
+  },
+  MHT_CET_PCB: {
+    label: "MHT-CET (PCB)",
+    exam: "MHT-CET (PCB)",
+    durationMinutes: 180,
+    subjectCounts: { Physics: 50, Chemistry: 50, Biology: 50 },
+    marking: { mode: "UNIFORM_NEGATIVE", correct: 1, wrong: 0, unanswered: 0 }
+  }
+};
+
+function toPrettyJson(value) {
+  return JSON.stringify(value, null, 2);
+}
+
+function toSectionId(subject, index) {
+  return `S${index + 1}_${String(subject).toUpperCase().replace(/[^A-Z0-9]+/g, "_")}`;
+}
+
+function buildSectionsFromSubjectCounts(subjectCounts, totalDurationMinutes) {
+  const subjects = Object.keys(subjectCounts).filter((s) => Number(subjectCounts[s]) > 0);
+  if (!subjects.length) return [];
+
+  const baseMinutes = Math.floor(totalDurationMinutes / subjects.length);
+  const remainder = totalDurationMinutes % subjects.length;
+  return subjects.map((subject, idx) => ({
+    sectionId: toSectionId(subject, idx),
+    name: subject,
+    order: idx,
+    durationMinutes: baseMinutes + (idx < remainder ? 1 : 0),
+    subjects: [subject],
+    questionCountBySubject: { [subject]: Number(subjectCounts[subject]) || 0 },
     allowedQuestionTypes: ["MCQ"],
     hardWindowEnforced: true
-  }
-];
+  }));
+}
 
 export function AdminTestsPage() {
   const { accessToken, user } = useSelector((s) => s.auth);
@@ -34,19 +62,24 @@ export function AdminTestsPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [busy, setBusy] = useState(false);
-
   const [tests, setTests] = useState([]);
 
-  const [exam, setExam] = useState("JEE Main (PCM)");
+  const [preset, setPreset] = useState("JEE_PCM");
   const [name, setName] = useState("Real-Time Demo Test - Auto");
-  const [sectionsJson, setSectionsJson] = useState(JSON.stringify(defaultSections, null, 2));
+  const [exam, setExam] = useState(PRESETS.JEE_PCM.exam);
+  const [durationMinutes, setDurationMinutes] = useState(PRESETS.JEE_PCM.durationMinutes);
+  const [subjectCounts, setSubjectCounts] = useState({ ...PRESETS.JEE_PCM.subjectCounts });
+  const [availableBySubject, setAvailableBySubject] = useState({});
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
-  const [markMode, setMarkMode] = useState("UNIFORM_NEGATIVE");
-  const [correct, setCorrect] = useState(1);
-  const [wrong, setWrong] = useState(0);
-  const [unanswered, setUnanswered] = useState(0);
+  const [markMode, setMarkMode] = useState(PRESETS.JEE_PCM.marking.mode);
+  const [correct, setCorrect] = useState(PRESETS.JEE_PCM.marking.correct);
+  const [wrong, setWrong] = useState(PRESETS.JEE_PCM.marking.wrong);
+  const [unanswered, setUnanswered] = useState(PRESETS.JEE_PCM.marking.unanswered);
 
-  const [createdId, setCreatedId] = useState("");
+  const [sectionsJson, setSectionsJson] = useState(
+    toPrettyJson(buildSectionsFromSubjectCounts(PRESETS.JEE_PCM.subjectCounts, PRESETS.JEE_PCM.durationMinutes))
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -56,7 +89,7 @@ export function AdminTestsPage() {
         const d = await apiFetch("/tests", { token: accessToken });
         if (!cancelled) setTests(d.items || []);
       } catch {
-        // Keep silent; admin can still create tests.
+        // ignore load errors
       }
     }
     load();
@@ -64,6 +97,32 @@ export function AdminTestsPage() {
       cancelled = true;
     };
   }, [accessToken]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadAvailability() {
+      if (!accessToken) return;
+      const subjects = Object.keys(subjectCounts).filter((s) => Number(subjectCounts[s]) >= 0);
+      const out = {};
+      await Promise.all(
+        subjects.map(async (subject) => {
+          try {
+            const d = await apiFetch(`/api/questions/filter?exam=${encodeURIComponent(exam)}&subject=${encodeURIComponent(subject)}&page=1&limit=1`, {
+              token: accessToken
+            });
+            out[subject] = Number(d.total || 0);
+          } catch {
+            out[subject] = null;
+          }
+        })
+      );
+      if (!cancelled) setAvailableBySubject(out);
+    }
+    loadAvailability();
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, exam, subjectCounts]);
 
   const parsedSections = useMemo(() => {
     try {
@@ -74,22 +133,72 @@ export function AdminTestsPage() {
     }
   }, [sectionsJson]);
 
+  const computedQuestionCount = useMemo(
+    () => Object.values(subjectCounts).reduce((sum, n) => sum + Number(n || 0), 0),
+    [subjectCounts]
+  );
+
+  function syncSectionsJson(nextSubjectCounts, nextDurationMinutes) {
+    const sections = buildSectionsFromSubjectCounts(nextSubjectCounts, Number(nextDurationMinutes || 0));
+    setSectionsJson(toPrettyJson(sections));
+  }
+
+  function applyPreset(presetKey) {
+    if (presetKey === "CUSTOM") {
+      setPreset("CUSTOM");
+      setExam("Custom Exam");
+      return;
+    }
+    const config = PRESETS[presetKey];
+    if (!config) return;
+    setPreset(presetKey);
+    setExam(config.exam);
+    setDurationMinutes(config.durationMinutes);
+    setSubjectCounts({ ...config.subjectCounts });
+    setMarkMode(config.marking.mode);
+    setCorrect(config.marking.correct);
+    setWrong(config.marking.wrong);
+    setUnanswered(config.marking.unanswered);
+    syncSectionsJson(config.subjectCounts, config.durationMinutes);
+  }
+
+  function onSubjectCountChange(subject, nextValue) {
+    setSubjectCounts((prev) => {
+      const next = { ...prev, [subject]: Math.max(0, Number(nextValue || 0)) };
+      syncSectionsJson(next, durationMinutes);
+      return next;
+    });
+  }
+
+  async function onAutoGenerate() {
+    setError("");
+    setSuccess("");
+    setBusy(true);
+    try {
+      syncSectionsJson(subjectCounts, durationMinutes);
+      setSuccess("Preset applied and sections generated.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function onSubmit(e) {
     e.preventDefault();
     setError("");
     setSuccess("");
-    setCreatedId("");
     setBusy(true);
-
     try {
       if (!accessToken) throw new Error("Not authenticated");
       if (!String(user?.role || "").toLowerCase().includes("admin")) throw new Error("Admin access required");
-      if (!parsedSections.ok) throw new Error(parsedSections.message);
+
+      const sections = showAdvanced ? (parsedSections.ok ? parsedSections.value : null) : buildSectionsFromSubjectCounts(subjectCounts, durationMinutes);
+      if (!sections) throw new Error(parsedSections.message || "Invalid sections JSON");
+      if (!sections.length) throw new Error("At least one subject must have a positive question count");
 
       const body = {
         exam,
         name,
-        sections: parsedSections.value,
+        sections,
         marking: {
           mode: markMode,
           correct,
@@ -100,14 +209,9 @@ export function AdminTestsPage() {
       };
 
       const data = await apiFetch("/api/admin/tests", { method: "POST", token: accessToken, body });
-      setCreatedId(data.id);
-      setSuccess(`Test created: ${data.id}`);
-      try {
-        const d = await apiFetch("/tests", { token: accessToken });
-        setTests(d.items || []);
-      } catch {
-        // ignore refresh errors
-      }
+      setSuccess(`Test created successfully: ${data.id}`);
+      const d = await apiFetch("/tests", { token: accessToken });
+      setTests(d.items || []);
     } catch (err) {
       setError(err.message || "Failed to create test");
     } finally {
@@ -115,7 +219,27 @@ export function AdminTestsPage() {
     }
   }
 
+  async function onDeleteTest(testId) {
+    if (!accessToken) return;
+    const ok = window.confirm("Delete this test? It will be deactivated and hidden from students.");
+    if (!ok) return;
+    setError("");
+    setSuccess("");
+    setBusy(true);
+    try {
+      await apiFetch(`/api/admin/tests/${testId}`, { method: "DELETE", token: accessToken });
+      setTests((prev) => prev.filter((t) => t._id !== testId));
+      setSuccess("Test deleted successfully.");
+    } catch (err) {
+      setError(err.message || "Failed to delete test");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (!accessToken) return null;
+
+  const subjectList = Object.keys(subjectCounts);
 
   return (
     <div className="space-y-4">
@@ -125,24 +249,69 @@ export function AdminTestsPage() {
       <Card>
         <CardBody className="p-6">
           <h2 className="text-xl font-bold text-secondary-900 mb-1">Create Test</h2>
-          <p className="text-sm text-secondary-600 mb-5">Paste section config in JSON. Each section includes subject counts (question blueprint).</p>
+          <p className="text-sm text-secondary-600 mb-4">Choose a preset, adjust question counts, and create test.</p>
 
           <form onSubmit={onSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <label className="block text-sm font-medium text-secondary-900">
-                Exam
-                <input value={exam} onChange={(e) => setExam(e.target.value)} className="w-full mt-1" required />
+                Exam Preset
+                <select
+                  value={preset}
+                  onChange={(e) => applyPreset(e.target.value)}
+                  className="w-full mt-1"
+                >
+                  <option value="JEE_PCM">JEE Main (PCM)</option>
+                  <option value="MHT_CET_PCM">MHT-CET (PCM)</option>
+                  <option value="MHT_CET_PCB">MHT-CET (PCB)</option>
+                  <option value="CUSTOM">Custom</option>
+                </select>
               </label>
               <label className="block text-sm font-medium text-secondary-900">
                 Test Name
                 <input value={name} onChange={(e) => setName(e.target.value)} className="w-full mt-1" required />
               </label>
+              <label className="block text-sm font-medium text-secondary-900">
+                Exam Label
+                <input value={exam} onChange={(e) => setExam(e.target.value)} className="w-full mt-1" required />
+              </label>
+              <label className="block text-sm font-medium text-secondary-900">
+                Total Duration (minutes)
+                <input
+                  type="number"
+                  min={1}
+                  value={durationMinutes}
+                  onChange={(e) => {
+                    const next = Math.max(1, Number(e.target.value || 1));
+                    setDurationMinutes(next);
+                    syncSectionsJson(subjectCounts, next);
+                  }}
+                  className="w-full mt-1"
+                  required
+                />
+              </label>
             </div>
 
-            <label className="block text-sm font-medium text-secondary-900">
-              Sections (JSON)
-              <textarea value={sectionsJson} onChange={(e) => setSectionsJson(e.target.value)} className="w-full mt-1 min-h-[220px] font-mono" required />
-            </label>
+            <div className="rounded-lg border border-secondary-200 p-4 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-secondary-900">Subjects</div>
+                  <div className="text-xs text-secondary-600">Edit question counts directly.</div>
+                </div>
+                <div className="text-xs text-secondary-600">Total Questions: <span className="font-semibold text-secondary-900">{computedQuestionCount}</span></div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {subjectList.map((subject) => (
+                  <SubjectCard
+                    key={subject}
+                    subject={subject}
+                    value={Number(subjectCounts[subject] || 0)}
+                    availableCount={availableBySubject[subject]}
+                    disabled={busy}
+                    onChange={(value) => onSubjectCountChange(subject, value)}
+                  />
+                ))}
+              </div>
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <label className="block text-sm font-medium text-secondary-900">
@@ -169,7 +338,23 @@ export function AdminTestsPage() {
               </div>
             </div>
 
+            <details className="rounded-md border border-secondary-200 p-3">
+              <summary
+                className="cursor-pointer text-sm font-medium text-secondary-900"
+                onClick={() => setShowAdvanced((s) => !s)}
+              >
+                Advanced Settings (JSON)
+              </summary>
+              <label className="block text-sm font-medium text-secondary-900 pt-3">
+                Sections JSON
+                <textarea value={sectionsJson} onChange={(e) => setSectionsJson(e.target.value)} className="w-full mt-1 min-h-[220px] font-mono" />
+              </label>
+            </details>
+
             <div className="pt-2 flex items-center gap-3 flex-wrap">
+              <Button type="button" variant="outline" disabled={busy} onClick={onAutoGenerate}>
+                Auto Generate Test
+              </Button>
               <Button type="submit" variant="primary" disabled={busy} isLoading={busy}>
                 {busy ? "Creating..." : "Create Test"}
               </Button>
@@ -180,7 +365,6 @@ export function AdminTestsPage() {
                 onClick={async () => {
                   setError("");
                   setSuccess("");
-                  setCreatedId("");
                   try {
                     const d = await apiFetch("/tests", { token: accessToken });
                     setTests(d.items || []);
@@ -207,7 +391,12 @@ export function AdminTestsPage() {
                     <div className="font-semibold text-secondary-900">{t.name}</div>
                     <div className="text-xs text-secondary-600">{t.exam} • {t.totalQuestions} questions • {Math.round(Number(t.durationMs || 0) / 60000)} min</div>
                   </div>
-                  <div className="text-xs text-secondary-600">version: {t.version || 1}</div>
+                  <div className="flex items-center gap-3">
+                    <div className="text-xs text-secondary-600">version: {t.version || 1}</div>
+                    <Button type="button" variant="outline" disabled={busy} onClick={() => onDeleteTest(t._id)}>
+                      Delete
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>

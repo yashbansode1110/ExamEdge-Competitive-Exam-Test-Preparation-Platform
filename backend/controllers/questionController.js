@@ -90,6 +90,30 @@ function computeContentHash({ exam, subject, chapter, topic, type, text, stateme
   return crypto.createHash("sha1").update(normalized).digest("hex");
 }
 
+function examMatchFilter(exam) {
+  const value = String(exam || "").trim();
+  if (!value) return undefined;
+  if (value.toUpperCase().includes("MHT-CET")) {
+    return { $in: ["MHT-CET", "MHT-CET (PCM)", "MHT-CET (PCB)"] };
+  }
+  if (value.toUpperCase().includes("JEE MAIN")) {
+    return { $in: ["JEE Main", "JEE Main (PCM)"] };
+  }
+  return value;
+}
+
+function subjectMatchFilter(subject) {
+  const raw = String(subject || "").trim();
+  const key = raw.toLowerCase();
+  if (key === "mathematics" || key === "math") return /^(mathematics|math)$/i;
+  return { $regex: `^${raw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" };
+}
+
+function chapterMatchFilter(chapter) {
+  const raw = String(chapter || "").trim();
+  return { $regex: `^${raw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" };
+}
+
 export async function listQuestions(req, res, next) {
   try {
     const q = z
@@ -104,9 +128,9 @@ export async function listQuestions(req, res, next) {
       .parse(req.query);
 
     const filter = { isActive: true };
-    if (q.exam) filter.exam = q.exam;
-    if (q.subject) filter.subject = q.subject;
-    if (q.chapter) filter.chapter = q.chapter;
+    if (q.exam) filter.exam = examMatchFilter(q.exam);
+    if (q.subject) filter.subject = subjectMatchFilter(q.subject);
+    if (q.chapter) filter.chapter = chapterMatchFilter(q.chapter);
     if (q.difficulty) filter.difficulty = q.difficulty;
 
     const skip = (q.page - 1) * q.limit;
@@ -136,55 +160,96 @@ export async function getByIds(req, res, next) {
 
 export async function adminCreateQuestion(req, res, next) {
   try {
-    const body = AdminQuestionCreateSchema.parse(req.body);
-    const contentHash = computeContentHash({
-      exam: body.exam,
-      subject: body.subject,
-      chapter: body.chapter,
-      topic: body.topic,
-      type: body.type,
-      text: body.text,
-      statement: body.statement || [],
-      options: body.type === "MCQ" ? body.options : [],
-      correctOptionKey: body.type === "MCQ" ? body.correctOptionKey : "",
-      numericalAnswer: body.type === "NUMERICAL" ? body.numericalAnswer : undefined,
-      latex: body.latex
-    });
-
-    const dupe = await Question.exists({
-      exam: body.exam,
-      subject: body.subject,
-      chapter: body.chapter,
-      topic: body.topic,
-      type: body.type,
-      contentHash
-    });
-    if (dupe) throw badRequest("Duplicate question", "DUPLICATE_QUESTION");
-
-    const created = await Question.create({
-      exam: body.exam,
-      subject: body.subject,
-      chapter: body.chapter,
-      topic: body.topic,
-      subtopic: body.subtopic || "",
-      type: body.type,
-      difficulty: body.difficulty,
-      text: body.text,
-      latex: body.latex,
-      statement: body.statement || [],
-      options: body.type === "MCQ" ? body.options : undefined,
-      correctOptionKey: body.type === "MCQ" ? body.correctOptionKey : undefined,
-      numericalAnswer: body.type === "NUMERICAL" ? body.numericalAnswer : undefined,
-      solution: body.solution ? { finalAnswerText: body.solution.finalAnswerText || "", steps: body.solution.steps || [] } : undefined,
-      tags: body.tags || [],
-      source: body.source || "",
-      year: body.year,
-      isActive: body.isActive ?? true
-    });
+    const created = await createOneAdminQuestion(req.body);
 
     res.status(201).json({ ok: true, id: created._id.toString() });
   } catch (e) {
     if (e?.code === 11000) return next(badRequest("Duplicate question", "DUPLICATE_QUESTION"));
+    next(e);
+  }
+}
+
+async function createOneAdminQuestion(rawBody) {
+  const body = AdminQuestionCreateSchema.parse(rawBody);
+  const contentHash = computeContentHash({
+    exam: body.exam,
+    subject: body.subject,
+    chapter: body.chapter,
+    topic: body.topic,
+    type: body.type,
+    text: body.text,
+    statement: body.statement || [],
+    options: body.type === "MCQ" ? body.options : [],
+    correctOptionKey: body.type === "MCQ" ? body.correctOptionKey : "",
+    numericalAnswer: body.type === "NUMERICAL" ? body.numericalAnswer : undefined,
+    latex: body.latex
+  });
+
+  const dupe = await Question.exists({
+    exam: body.exam,
+    subject: body.subject,
+    chapter: body.chapter,
+    topic: body.topic,
+    type: body.type,
+    contentHash
+  });
+  if (dupe) throw badRequest("Duplicate question", "DUPLICATE_QUESTION");
+
+  return Question.create({
+    exam: body.exam,
+    subject: body.subject,
+    chapter: body.chapter,
+    topic: body.topic,
+    subtopic: body.subtopic || "",
+    type: body.type,
+    difficulty: body.difficulty,
+    text: body.text,
+    latex: body.latex,
+    statement: body.statement || [],
+    options: body.type === "MCQ" ? body.options : undefined,
+    correctOptionKey: body.type === "MCQ" ? body.correctOptionKey : undefined,
+    numericalAnswer: body.type === "NUMERICAL" ? body.numericalAnswer : undefined,
+    solution: body.solution ? { finalAnswerText: body.solution.finalAnswerText || "", steps: body.solution.steps || [] } : undefined,
+    tags: body.tags || [],
+    source: body.source || "",
+    year: body.year,
+    isActive: body.isActive ?? true
+  });
+}
+
+export async function adminBulkCreateQuestions(req, res, next) {
+  try {
+    const body = z
+      .object({
+        questions: z.array(z.unknown()).min(1).max(100)
+      })
+      .parse(req.body);
+
+    const createdIds = [];
+    const failures = [];
+
+    for (let i = 0; i < body.questions.length; i += 1) {
+      try {
+        const created = await createOneAdminQuestion(body.questions[i]);
+        createdIds.push(created._id.toString());
+      } catch (err) {
+        failures.push({
+          index: i,
+          message: err?.message || "Failed to create question",
+          code: err?.code || err?.statusCode || "CREATE_FAILED"
+        });
+      }
+    }
+
+    res.status(failures.length ? 207 : 201).json({
+      ok: failures.length === 0,
+      total: body.questions.length,
+      createdCount: createdIds.length,
+      failedCount: failures.length,
+      createdIds,
+      failures
+    });
+  } catch (e) {
     next(e);
   }
 }

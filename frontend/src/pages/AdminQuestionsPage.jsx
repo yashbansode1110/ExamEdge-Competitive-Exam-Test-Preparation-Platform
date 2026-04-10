@@ -5,6 +5,15 @@ import { Card, CardBody } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { Alert } from "../components/ui/Alert";
 
+/** Preset chapters per subject for admin question creation. */
+const SUBJECT_CHAPTERS = {
+  Physics: ["Kinematics", "Laws of Motion", "Work Energy Power"],
+  Chemistry: ["Atomic Structure", "Bonding", "Thermodynamics"],
+  Mathematics: ["Quadratic Equations", "Calculus", "Matrices"],
+  Biology: ["Cell: Structure & Function", "Human Physiology", "Genetics"]
+};
+const EXAM_OPTIONS = ["JEE Main (PCM)", "MHT-CET (PCM)", "MHT-CET (PCB)"];
+
 function optionListFromState(optionState) {
   return ["A", "B", "C", "D"]
     .map((key) => ({ key, text: optionState[key] || "" }))
@@ -23,10 +32,16 @@ export function AdminQuestionsPage() {
   // Manual Entry (existing)
   // -------------------------
   const [exam, setExam] = useState("JEE Main (PCM)");
-  const [subject, setSubject] = useState("Mathematics");
-  const [chapter, setChapter] = useState("Algebra");
-  const [topic, setTopic] = useState("Quadratic Equations");
-  const [subtopic, setSubtopic] = useState("Quadratic Equations");
+  const [subject, setSubject] = useState("Physics");
+  const [chapter, setChapter] = useState(SUBJECT_CHAPTERS.Physics[0]);
+
+  const allowedSubjects = useMemo(() => {
+    const v = String(exam || "").toUpperCase();
+    if (v.includes("MHT-CET") && v.includes("PCB")) return ["Physics", "Chemistry", "Biology"];
+    if (v.includes("MHT-CET") && v.includes("PCM")) return ["Physics", "Chemistry", "Mathematics"];
+    if (v.includes("JEE")) return ["Physics", "Chemistry", "Mathematics"];
+    return Object.keys(SUBJECT_CHAPTERS);
+  }, [exam]);
 
   const [type, setType] = useState("MCQ"); // MCQ | NUMERICAL
   const [difficulty, setDifficulty] = useState(3);
@@ -37,14 +52,15 @@ export function AdminQuestionsPage() {
   const [correctOptionKey, setCorrectOptionKey] = useState("A");
 
   const [numericalAnswer, setNumericalAnswer] = useState("");
+  const [manualBatch, setManualBatch] = useState([]);
 
   const payloadPreview = useMemo(() => {
     const base = {
       exam,
       subject,
       chapter,
-      topic,
-      subtopic,
+      topic: chapter,
+      subtopic: "",
       type,
       difficulty,
       text,
@@ -63,7 +79,24 @@ export function AdminQuestionsPage() {
       ...base,
       numericalAnswer: numericalAnswer === "" ? undefined : Number(numericalAnswer)
     };
-  }, [exam, subject, chapter, topic, subtopic, type, difficulty, text, latex, options, correctOptionKey, numericalAnswer]);
+  }, [exam, subject, chapter, type, difficulty, text, latex, options, correctOptionKey, numericalAnswer]);
+
+  function resetManualQuestionForm() {
+    setText("");
+    setOptions({ A: "", B: "", C: "", D: "" });
+    setNumericalAnswer("");
+    setCorrectOptionKey("A");
+    setLatex(false);
+  }
+
+  function buildManualQuestionPayload() {
+    return {
+      ...payloadPreview,
+      tags: ["admin"],
+      source: "manual",
+      isActive: true
+    };
+  }
 
   async function onSubmit(e) {
     e.preventDefault();
@@ -75,13 +108,7 @@ export function AdminQuestionsPage() {
       if (!accessToken) throw new Error("Not authenticated");
       if (!String(user?.role || "").toLowerCase().includes("admin")) throw new Error("Admin access required");
 
-      const body = {
-        ...payloadPreview,
-        // Add an explicit tag for easier debugging/QA.
-        tags: ["admin"],
-        source: "manual",
-        isActive: true
-      };
+      const body = buildManualQuestionPayload();
 
       const data = await apiFetch("/api/admin/questions", {
         method: "POST",
@@ -90,11 +117,54 @@ export function AdminQuestionsPage() {
       });
 
       setSuccess(`Question created: ${data.id}`);
-      setText("");
-      setOptions({ A: "", B: "", C: "", D: "" });
-      setNumericalAnswer("");
+      resetManualQuestionForm();
     } catch (err) {
       setError(err.message || "Failed to create question");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function onAddToBatch() {
+    try {
+      const body = buildManualQuestionPayload();
+      if (!body.text?.trim()) throw new Error("Question text is required");
+      if (body.type === "MCQ") {
+        if (!Array.isArray(body.options) || body.options.length < 2) throw new Error("MCQ requires at least 2 options");
+        if (!body.options.some((o) => o.key === body.correctOptionKey)) throw new Error("Correct option key must exist in options");
+      } else if (body.numericalAnswer == null || Number.isNaN(Number(body.numericalAnswer))) {
+        throw new Error("Numerical answer is required");
+      }
+
+      setManualBatch((prev) => [...prev, body]);
+      setSuccess("Question added to batch queue.");
+      setError("");
+      resetManualQuestionForm();
+    } catch (err) {
+      setError(err.message || "Unable to add question to batch");
+    }
+  }
+
+  async function onSaveManualBatch() {
+    if (!accessToken) return;
+    if (!manualBatch.length) return;
+    setError("");
+    setSuccess("");
+    setBusy(true);
+    try {
+      const data = await apiFetch("/api/admin/questions/bulk", {
+        method: "POST",
+        token: accessToken,
+        body: { questions: manualBatch }
+      });
+      setManualBatch([]);
+      if (data.failedCount > 0) {
+        setError(`${data.failedCount} questions failed. ${data.createdCount} created successfully.`);
+      } else {
+        setSuccess(`${data.createdCount} questions created successfully.`);
+      }
+    } catch (err) {
+      setError(err.message || "Failed to create questions in bulk");
     } finally {
       setBusy(false);
     }
@@ -105,6 +175,7 @@ export function AdminQuestionsPage() {
   // -------------------------
   const [aiExam, setAiExam] = useState("JEE Main (PCM)");
   const [aiSubject, setAiSubject] = useState("Mathematics");
+  const [aiChapter, setAiChapter] = useState(SUBJECT_CHAPTERS.Mathematics[0]);
   const [aiTopic, setAiTopic] = useState("");
   const [aiDifficulty, setAiDifficulty] = useState("Medium"); // Easy | Medium | Hard
   const [aiCount, setAiCount] = useState(5);
@@ -112,6 +183,14 @@ export function AdminQuestionsPage() {
   const [aiBusy, setAiBusy] = useState(false);
   const [aiSaving, setAiSaving] = useState(false);
   const [aiPreviewQuestions, setAiPreviewQuestions] = useState([]);
+
+  const allowedAiSubjects = useMemo(() => {
+    const v = String(aiExam || "").toUpperCase();
+    if (v.includes("MHT-CET") && v.includes("PCB")) return ["Physics", "Chemistry", "Biology"];
+    if (v.includes("MHT-CET") && v.includes("PCM")) return ["Physics", "Chemistry", "Mathematics"];
+    if (v.includes("JEE")) return ["Physics", "Chemistry", "Mathematics"];
+    return Object.keys(SUBJECT_CHAPTERS);
+  }, [aiExam]);
 
   function aiDifficultyLabelToNumber(label) {
     if (label === "Easy") return 2;
@@ -161,50 +240,43 @@ export function AdminQuestionsPage() {
     setAiSaving(true);
     try {
       const difficultyNumber = aiDifficultyLabelToNumber(aiDifficulty);
+      const chapterForAi = aiChapter || aiTopic;
+      const payloadQuestions = aiPreviewQuestions.map((q) => ({
+        exam: aiExam,
+        subject: aiSubject,
+        chapter: chapterForAi,
+        topic: aiTopic,
+        subtopic: "",
+        type: "MCQ",
+        difficulty: difficultyNumber,
+        text: q.question,
+        latex: false,
+        options: ["A", "B", "C", "D"].map((key, idx) => ({
+          key,
+          text: q.options?.[idx] || ""
+        })),
+        correctOptionKey: q.correctAnswer,
+        tags: ["ai-generator"],
+        source: "ai",
+        isActive: true
+      }));
 
-      const chapterForAi = aiTopic; // Schema requires chapter; we treat topic as chapter for AI.
-      let saved = 0;
-      let failed = 0;
-      const remaining = [];
+      const result = await apiFetch("/api/admin/questions/bulk", {
+        method: "POST",
+        token: accessToken,
+        body: { questions: payloadQuestions }
+      });
 
-      for (const q of aiPreviewQuestions) {
-        try {
-          const optionsForApi = ["A", "B", "C", "D"].map((key, idx) => ({
-            key,
-            text: q.options?.[idx] || ""
-          }));
-
-          await apiFetch("/api/admin/questions", {
-            method: "POST",
-            token: accessToken,
-            body: {
-              exam: aiExam,
-              subject: aiSubject,
-              chapter: chapterForAi,
-              topic: aiTopic,
-              subtopic: "",
-              type: "MCQ",
-              difficulty: difficultyNumber,
-              text: q.question,
-              latex: false,
-              options: optionsForApi,
-              correctOptionKey: q.correctAnswer,
-              tags: ["ai-generator"],
-              source: "ai",
-              isActive: true
-            }
-          });
-
-          saved += 1;
-        } catch (err) {
-          failed += 1;
-          remaining.push(q);
-        }
+      if (result.failedCount > 0) {
+        const failedIndexes = new Set((result.failures || []).map((f) => f.index));
+        const remaining = aiPreviewQuestions.filter((_q, index) => failedIndexes.has(index));
+        setAiPreviewQuestions(remaining);
+        if (result.createdCount > 0) setSuccess(`${result.createdCount} AI-generated questions saved.`);
+        setError(`${result.failedCount} questions failed to save. They remain in preview for retry.`);
+      } else {
+        setAiPreviewQuestions([]);
+        setSuccess(`${result.createdCount} AI-generated questions saved.`);
       }
-
-      setAiPreviewQuestions(remaining);
-      if (saved > 0) setSuccess(`${saved} AI-generated questions saved.`);
-      if (failed > 0) setError(`${failed} questions failed to save. They remain in preview for retry.`);
     } finally {
       setAiSaving(false);
     }
@@ -234,13 +306,43 @@ export function AdminQuestionsPage() {
         <Card>
           <CardBody className="p-6">
             <h2 className="text-xl font-bold text-secondary-900 mb-1">Create Question</h2>
-            <p className="text-sm text-secondary-600 mb-5">Admins can add MCQ or Numerical questions in real time.</p>
+            <p className="text-sm text-secondary-600 mb-2">Admins can add MCQ or Numerical questions in real time.</p>
+            <div className="rounded-md border border-secondary-200 bg-secondary-50 p-3 text-xs text-secondary-700 mb-5">
+              <strong>Simple use:</strong> fill one question and click <strong>Create Question</strong>.<br />
+              <strong>Batch use:</strong> click <strong>Queue Question</strong> for each question, then <strong>Save All Queued</strong> once.
+            </div>
 
             <form onSubmit={onSubmit} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <label className="block text-sm font-medium text-secondary-900">
                   Exam
-                  <input value={exam} onChange={(e) => setExam(e.target.value)} className="w-full mt-1" required />
+                  <select
+                    value={exam}
+                    onChange={(e) => {
+                      const nextExam = e.target.value;
+                      setExam(nextExam);
+                      // Ensure subject stays valid for the selected exam (PCM vs PCB).
+                      const v = String(nextExam || "").toUpperCase();
+                      const nextAllowed =
+                        v.includes("MHT-CET") && v.includes("PCB")
+                          ? ["Physics", "Chemistry", "Biology"]
+                          : ["Physics", "Chemistry", "Mathematics"];
+                      if (!nextAllowed.includes(subject)) {
+                        const fallback = nextAllowed[0];
+                        setSubject(fallback);
+                        const list = SUBJECT_CHAPTERS[fallback];
+                        if (list?.length) setChapter(list[0]);
+                      }
+                    }}
+                    className="w-full mt-1"
+                    required
+                  >
+                    {EXAM_OPTIONS.map((opt) => (
+                      <option key={opt} value={opt}>
+                        {opt}
+                      </option>
+                    ))}
+                  </select>
                 </label>
                 <label className="block text-sm font-medium text-secondary-900">
                   Difficulty (1-5)
@@ -257,21 +359,40 @@ export function AdminQuestionsPage() {
 
                 <label className="block text-sm font-medium text-secondary-900">
                   Subject
-                  <input value={subject} onChange={(e) => setSubject(e.target.value)} className="w-full mt-1" required />
+                  <select
+                    value={subject}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setSubject(next);
+                      const list = SUBJECT_CHAPTERS[next];
+                      if (list?.length) setChapter(list[0]);
+                    }}
+                    className="w-full mt-1"
+                    required
+                  >
+                    {allowedSubjects.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
                 </label>
                 <label className="block text-sm font-medium text-secondary-900">
                   Chapter
-                  <input value={chapter} onChange={(e) => setChapter(e.target.value)} className="w-full mt-1" required />
+                  <select
+                    value={chapter}
+                    onChange={(e) => setChapter(e.target.value)}
+                    className="w-full mt-1"
+                    required
+                  >
+                    {(SUBJECT_CHAPTERS[subject] || []).map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
                 </label>
 
-                <label className="block text-sm font-medium text-secondary-900">
-                  Topic
-                  <input value={topic} onChange={(e) => setTopic(e.target.value)} className="w-full mt-1" required />
-                </label>
-                <label className="block text-sm font-medium text-secondary-900">
-                  Subtopic
-                  <input value={subtopic} onChange={(e) => setSubtopic(e.target.value)} className="w-full mt-1" />
-                </label>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -342,15 +463,53 @@ export function AdminQuestionsPage() {
                 </label>
               )}
 
-              <div className="pt-2">
+              <div className="pt-2 flex flex-wrap gap-3">
                 <Button type="submit" variant="primary" disabled={busy} isLoading={busy}>
                   {busy ? "Creating..." : "Create Question"}
                 </Button>
+                <Button type="button" variant="outline" disabled={busy} onClick={onAddToBatch}>
+                  Queue Question
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  disabled={busy || !manualBatch.length}
+                  isLoading={busy && !!manualBatch.length}
+                  onClick={onSaveManualBatch}
+                >
+                  Save All Queued ({manualBatch.length})
+                </Button>
               </div>
 
-              <div className="text-xs text-secondary-600 pt-2">
-                Payload preview (for debugging): <span className="font-mono">{JSON.stringify(payloadPreview)}</span>
-              </div>
+              {manualBatch.length ? (
+                <div className="rounded-md border border-secondary-200 p-3">
+                  <div className="text-sm font-semibold text-secondary-900 mb-2">Queued Questions ({manualBatch.length})</div>
+                  <div className="space-y-2 max-h-56 overflow-auto pr-1">
+                    {manualBatch.map((q, idx) => (
+                      <div key={`${idx}`} className="flex items-start justify-between gap-3 rounded border border-secondary-200 p-2">
+                        <div>
+                          <div className="text-xs text-secondary-700">{q.subject} • {q.topic} • {q.type}</div>
+                          <div className="text-sm text-secondary-900">{q.text}</div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setManualBatch((prev) => prev.filter((_item, i) => i !== idx))}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              <details className="text-xs text-secondary-600 pt-2">
+                <summary className="cursor-pointer">Advanced: payload preview</summary>
+                <div className="pt-1 break-all">
+                  <span className="font-mono">{JSON.stringify(payloadPreview)}</span>
+                </div>
+              </details>
             </form>
           </CardBody>
         </Card>
@@ -366,7 +525,32 @@ export function AdminQuestionsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <label className="block text-sm font-medium text-secondary-900">
                   Exam
-                  <input value={aiExam} onChange={(e) => setAiExam(e.target.value)} className="w-full mt-1" required />
+                  <select
+                    value={aiExam}
+                    onChange={(e) => {
+                      const nextExam = e.target.value;
+                      setAiExam(nextExam);
+                      const v = String(nextExam || "").toUpperCase();
+                      const nextAllowed =
+                        v.includes("MHT-CET") && v.includes("PCB")
+                          ? ["Physics", "Chemistry", "Biology"]
+                          : ["Physics", "Chemistry", "Mathematics"];
+                      if (!nextAllowed.includes(aiSubject)) {
+                        const fallback = nextAllowed[0];
+                        setAiSubject(fallback);
+                        const list = SUBJECT_CHAPTERS[fallback];
+                        if (list?.length) setAiChapter(list[0]);
+                      }
+                    }}
+                    className="w-full mt-1"
+                    required
+                  >
+                    {EXAM_OPTIONS.map((opt) => (
+                      <option key={opt} value={opt}>
+                        {opt}
+                      </option>
+                    ))}
+                  </select>
                 </label>
 
                 <label className="block text-sm font-medium text-secondary-900">
@@ -380,7 +564,39 @@ export function AdminQuestionsPage() {
 
                 <label className="block text-sm font-medium text-secondary-900">
                   Subject
-                  <input value={aiSubject} onChange={(e) => setAiSubject(e.target.value)} className="w-full mt-1" required />
+                  <select
+                    value={aiSubject}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setAiSubject(next);
+                      const list = SUBJECT_CHAPTERS[next];
+                      if (list?.length) setAiChapter(list[0]);
+                    }}
+                    className="w-full mt-1"
+                    required
+                  >
+                    {allowedAiSubjects.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block text-sm font-medium text-secondary-900">
+                  Chapter
+                  <select
+                    value={aiChapter}
+                    onChange={(e) => setAiChapter(e.target.value)}
+                    className="w-full mt-1"
+                    required
+                  >
+                    {(SUBJECT_CHAPTERS[aiSubject] || []).map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
                 </label>
 
                 <label className="block text-sm font-medium text-secondary-900">

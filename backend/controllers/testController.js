@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { listTests, getTestById, startTest, autosaveAttempt, submitAttempt } from "../services/testEngineService.js";
+import { listTests, getTestById, startTest, autosaveAttempt, submitAttempt, getAttemptResult } from "../services/testEngineService.js";
+import { TestAttempt } from "../models/TestAttempt.js";
+import { notFound } from "../middleware/errorHandler.js";
+import { persistCheatEventsFromAutosave } from "./cheatingController.js";
 
 export async function getTests(req, res, next) {
   try {
@@ -110,6 +113,14 @@ export async function autosave(req, res, next) {
       }
     });
 
+    if (body.cheatEvents?.length) {
+      await persistCheatEventsFromAutosave({
+        userId: req.user.id,
+        attemptId: body.attemptId,
+        events: body.cheatEvents
+      });
+    }
+
     res.json({ ok: true, lastSavedAt: out.lastSavedAt, revision: out.revision });
   } catch (e) {
     next(e);
@@ -122,7 +133,19 @@ export async function submit(req, res, next) {
       .object({
         attemptId: z.string().min(1),
         sessionId: z.string().min(8),
-        submitIdempotencyKey: z.string().min(8).optional()
+        submitIdempotencyKey: z.string().min(8).optional(),
+        responses: z
+          .array(
+            z.object({
+              questionId: z.string().min(1),
+              selectedOption: z.union([z.string(), z.number()]).optional(),
+              type: z.enum(["MCQ", "NUMERICAL"]),
+              timeTaken: z.coerce.number().int().min(0).optional().default(0)
+            })
+          )
+          .optional()
+          .default([]),
+        timeUsed: z.coerce.number().int().min(0).optional()
       })
       .parse(req.body);
 
@@ -130,10 +153,61 @@ export async function submit(req, res, next) {
       userId: req.user.id,
       attemptId: body.attemptId,
       sessionId: body.sessionId,
-      submitIdempotencyKey: body.submitIdempotencyKey
+      submitIdempotencyKey: body.submitIdempotencyKey,
+      responses: body.responses,
+      timeUsed: body.timeUsed
     });
 
     res.json({ ok: true, alreadySubmitted: out.alreadySubmitted, timedOut: out.timedOut, result: out.result });
+  } catch (e) {
+    next(e);
+  }
+}
+
+export async function submitByTestId(req, res, next) {
+  try {
+    const body = z
+      .object({
+        sessionId: z.string().min(8),
+        submitIdempotencyKey: z.string().min(8).optional(),
+        responses: z
+          .array(
+            z.object({
+              questionId: z.string().min(1),
+              selectedOption: z.union([z.string(), z.number()]).optional(),
+              type: z.enum(["MCQ", "NUMERICAL"]),
+              timeTaken: z.coerce.number().int().min(0).optional().default(0)
+            })
+          )
+          .default([]),
+        timeUsed: z.coerce.number().int().min(0).optional()
+      })
+      .parse(req.body);
+
+    const testId = z.string().min(1).parse(req.params.testId);
+    const attempt = await TestAttempt.findOne({ userId: req.user.id, testId, status: "in_progress" }).select("_id").lean();
+    if (!attempt) throw notFound("Active attempt not found for this test");
+
+    const out = await submitAttempt({
+      userId: req.user.id,
+      attemptId: attempt._id.toString(),
+      sessionId: body.sessionId,
+      submitIdempotencyKey: body.submitIdempotencyKey,
+      responses: body.responses,
+      timeUsed: body.timeUsed
+    });
+
+    res.json({ ok: true, alreadySubmitted: out.alreadySubmitted, timedOut: out.timedOut, result: out.result });
+  } catch (e) {
+    next(e);
+  }
+}
+
+export async function getResult(req, res, next) {
+  try {
+    const attemptId = z.string().min(1).parse(req.params.attemptId);
+    const result = await getAttemptResult({ userId: req.user.id, attemptId });
+    res.json({ ok: true, result });
   } catch (e) {
     next(e);
   }

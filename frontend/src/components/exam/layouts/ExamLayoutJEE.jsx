@@ -13,13 +13,17 @@ import { Button } from "../../ui/Button.jsx";
 export function ExamLayoutJEE({
   testName,
   endsAt,
+  secondsLeft,
   sections,
   activeSectionId,
   onSwitchSection,
   indexes,
   currentIndex,
+  questionNumber,
+  subjectLabel,
   totalQuestions,
   getStatusForPalette,
+  getPaletteLabel,
   onSelectQuestion,
   currentQuestion,
   currentAnswer,
@@ -41,7 +45,7 @@ export function ExamLayoutJEE({
           </div>
 
           <div className="flex items-center gap-3">
-            <TimerBar endsAt={endsAt} />
+            <TimerBar endsAt={endsAt} secondsLeft={secondsLeft} />
             <Button variant="danger" size="sm" onClick={onSubmit}>
               Submit
             </Button>
@@ -71,7 +75,7 @@ export function ExamLayoutJEE({
             <div className="mt-3">
               <QuestionPaletteVirtual
                 indexes={indexes}
-                getLabel={(idx) => idx + 1}
+                getLabel={(idx) => (getPaletteLabel ? getPaletteLabel(idx) : idx + 1)}
                 getStatus={getStatusForPalette}
                 activeIndex={currentIndex}
                 onSelect={onSelectQuestion}
@@ -101,14 +105,15 @@ export function ExamLayoutJEE({
           {currentQuestion ? (
             <QuestionCard
               variant="jee"
-              questionNumber={currentIndex + 1}
+              questionNumber={questionNumber || currentIndex + 1}
               totalQuestions={totalQuestions}
               question={currentQuestion}
+              subjectLabel={subjectLabel}
               answer={currentAnswer}
               onAnswer={onAnswer}
               footer={
                 <ExamFooter
-                  questionNumber={currentIndex + 1}
+                  questionNumber={questionNumber || currentIndex + 1}
                   totalQuestions={totalQuestions}
                   canGoBack={canGoBack}
                   canGoNext={canGoNext}
