@@ -14,6 +14,7 @@
     "bcrypt": "latest",
     "compression": "latest",
     "cors": "latest",
+    "csv-parser": "^3.2.0",
     "dotenv": "^17.4.1",
     "express": "latest",
     "express-rate-limit": "latest",
@@ -22,6 +23,7 @@
     "jsonwebtoken": "latest",
     "mongoose": "^8.23.0",
     "morgan": "latest",
+    "multer": "^2.1.1",
     "openai": "^6.32.0",
     "pdfkit": "^0.18.0",
     "zod": "latest"

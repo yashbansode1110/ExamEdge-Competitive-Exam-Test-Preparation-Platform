@@ -71,6 +71,7 @@ export function AdminTestsPage() {
   const [subjectCounts, setSubjectCounts] = useState({ ...PRESETS.JEE_PCM.subjectCounts });
   const [availableBySubject, setAvailableBySubject] = useState({});
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [difficultyBalance, setDifficultyBalance] = useState(false);
 
   const [markMode, setMarkMode] = useState(PRESETS.JEE_PCM.marking.mode);
   const [correct, setCorrect] = useState(PRESETS.JEE_PCM.marking.correct);
@@ -80,6 +81,26 @@ export function AdminTestsPage() {
   const [sectionsJson, setSectionsJson] = useState(
     toPrettyJson(buildSectionsFromSubjectCounts(PRESETS.JEE_PCM.subjectCounts, PRESETS.JEE_PCM.durationMinutes))
   );
+
+  const [filterExam, setFilterExam] = useState("JEE Main (PCM)");
+  const [filterTestName, setFilterTestName] = useState("Filtered practice test");
+  const [filterSubject, setFilterSubject] = useState("Physics");
+  const [filterChapter, setFilterChapter] = useState("Kinematics");
+  const [filterTopic, setFilterTopic] = useState("");
+  const [filterDifficulty, setFilterDifficulty] = useState("");
+  const [filterCount, setFilterCount] = useState(10);
+  const [filterDurationMinutes, setFilterDurationMinutes] = useState(60);
+  const [filterBusy, setFilterBusy] = useState(false);
+
+  const filterSubjectOptions = useMemo(() => {
+    const v = String(filterExam || "").toUpperCase();
+    if (v.includes("MHT-CET") && v.includes("PCB")) return ["Physics", "Chemistry", "Biology"];
+    return ["Physics", "Chemistry", "Mathematics"];
+  }, [filterExam]);
+
+  useEffect(() => {
+    setFilterSubject((prev) => (filterSubjectOptions.includes(prev) ? prev : filterSubjectOptions[0]));
+  }, [filterExam, filterSubjectOptions]);
 
   useEffect(() => {
     let cancelled = false;
@@ -199,6 +220,7 @@ export function AdminTestsPage() {
         exam,
         name,
         sections,
+        difficultyBalance,
         marking: {
           mode: markMode,
           correct,
@@ -216,6 +238,57 @@ export function AdminTestsPage() {
       setError(err.message || "Failed to create test");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function onSubmitFilterTest(e) {
+    e.preventDefault();
+    setError("");
+    setSuccess("");
+    setFilterBusy(true);
+    try {
+      if (!accessToken) throw new Error("Not authenticated");
+      if (!String(user?.role || "").toLowerCase().includes("admin")) throw new Error("Admin access required");
+      const count = Math.max(1, Number(filterCount || 1));
+      const sectionName = filterTopic.trim()
+        ? `${filterSubject} — ${filterChapter} / ${filterTopic}`
+        : `${filterSubject} — ${filterChapter || "All chapters"}`;
+      const section = {
+        sectionId: "S1_FILTER",
+        name: sectionName,
+        order: 0,
+        durationMinutes: Math.max(1, Number(filterDurationMinutes || 1)),
+        subjects: [filterSubject],
+        questionCountBySubject: { [filterSubject]: count },
+        allowedQuestionTypes: ["MCQ"],
+        hardWindowEnforced: true,
+        chapter: filterChapter.trim(),
+        topic: filterTopic.trim(),
+        ...(filterDifficulty !== "" && filterDifficulty != null
+          ? { difficulty: Math.min(5, Math.max(1, Number(filterDifficulty))) }
+          : {})
+      };
+      const body = {
+        exam: filterExam,
+        name: filterTestName.trim() || "Filtered test",
+        sections: [section],
+        difficultyBalance: false,
+        marking: {
+          mode: markMode,
+          correct,
+          wrong,
+          unanswered,
+          weights: {}
+        }
+      };
+      const data = await apiFetch("/api/admin/tests", { method: "POST", token: accessToken, body });
+      setSuccess(`Filter-based test created: ${data.id}`);
+      const d = await apiFetch("/tests", { token: accessToken });
+      setTests(d.items || []);
+    } catch (err) {
+      setError(err.message || "Failed to create filtered test");
+    } finally {
+      setFilterBusy(false);
     }
   }
 
@@ -290,6 +363,17 @@ export function AdminTestsPage() {
                 />
               </label>
             </div>
+
+            <label className="flex items-center gap-2 cursor-pointer text-sm text-secondary-800">
+              <input
+                type="checkbox"
+                checked={difficultyBalance}
+                onChange={(e) => setDifficultyBalance(e.target.checked)}
+              />
+              <span>
+                Balance difficulty (sample evenly across levels 1–5 per subject section when no section difficulty is set)
+              </span>
+            </label>
 
             <div className="rounded-lg border border-secondary-200 p-4 space-y-3">
               <div className="flex items-center justify-between gap-3">
@@ -376,6 +460,95 @@ export function AdminTestsPage() {
                 Refresh tests
               </Button>
             </div>
+          </form>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardBody className="p-6">
+          <h2 className="text-xl font-bold text-secondary-900 mb-1">Smart filter test</h2>
+          <p className="text-sm text-secondary-600 mb-4">
+            Build a single-section test from subject, chapter, optional topic, optional difficulty, and question count (e.g. Physics → Kinematics → Medium → 10).
+          </p>
+          <form onSubmit={onSubmitFilterTest} className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <label className="block text-sm font-medium text-secondary-900">
+                Exam
+                <select value={filterExam} onChange={(e) => setFilterExam(e.target.value)} className="w-full mt-1" required>
+                  <option value="JEE Main (PCM)">JEE Main (PCM)</option>
+                  <option value="MHT-CET (PCM)">MHT-CET (PCM)</option>
+                  <option value="MHT-CET (PCB)">MHT-CET (PCB)</option>
+                </select>
+              </label>
+              <label className="block text-sm font-medium text-secondary-900">
+                Test name
+                <input value={filterTestName} onChange={(e) => setFilterTestName(e.target.value)} className="w-full mt-1" required />
+              </label>
+              <label className="block text-sm font-medium text-secondary-900">
+                Subject
+                <select
+                  value={filterSubject}
+                  onChange={(e) => setFilterSubject(e.target.value)}
+                  className="w-full mt-1"
+                  required
+                >
+                  {filterSubjectOptions.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-sm font-medium text-secondary-900">
+                Chapter (exact match)
+                <input value={filterChapter} onChange={(e) => setFilterChapter(e.target.value)} className="w-full mt-1" required />
+              </label>
+              <label className="block text-sm font-medium text-secondary-900">
+                Topic (optional, exact match)
+                <input value={filterTopic} onChange={(e) => setFilterTopic(e.target.value)} className="w-full mt-1" placeholder="Leave empty to ignore" />
+              </label>
+              <label className="block text-sm font-medium text-secondary-900">
+                Difficulty (optional)
+                <select
+                  value={filterDifficulty}
+                  onChange={(e) => setFilterDifficulty(e.target.value)}
+                  className="w-full mt-1"
+                >
+                  <option value="">Any</option>
+                  <option value="1">1</option>
+                  <option value="2">2 (Easy)</option>
+                  <option value="3">3 (Medium)</option>
+                  <option value="4">4</option>
+                  <option value="5">5 (Hard)</option>
+                </select>
+              </label>
+              <label className="block text-sm font-medium text-secondary-900">
+                Question count
+                <input
+                  type="number"
+                  min={1}
+                  max={200}
+                  value={filterCount}
+                  onChange={(e) => setFilterCount(Number(e.target.value))}
+                  className="w-full mt-1"
+                  required
+                />
+              </label>
+              <label className="block text-sm font-medium text-secondary-900">
+                Section duration (minutes)
+                <input
+                  type="number"
+                  min={1}
+                  value={filterDurationMinutes}
+                  onChange={(e) => setFilterDurationMinutes(Number(e.target.value))}
+                  className="w-full mt-1"
+                  required
+                />
+              </label>
+            </div>
+            <Button type="submit" variant="primary" disabled={filterBusy || busy} isLoading={filterBusy}>
+              {filterBusy ? "Creating…" : "Generate test from filters"}
+            </Button>
           </form>
         </CardBody>
       </Card>

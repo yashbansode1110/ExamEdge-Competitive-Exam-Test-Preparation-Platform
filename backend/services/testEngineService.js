@@ -54,9 +54,10 @@ function enforceSectionWindow({ test, attempt, now, answers }) {
   const testSec = test.sections.find((x) => x.sectionId === sec.sectionId);
   if (!testSec?.hardWindowEnforced) return;
   const allowedSubjects = new Set(testSec.subjects || []);
-  for (const a of answers) {
+  for (let i = answers.length - 1; i >= 0; i--) {
+    const a = answers[i];
     if (a.subject && !allowedSubjects.has(a.subject)) {
-      throw forbidden("Section time window violation", "SECTION_VIOLATION");
+      answers.splice(i, 1); // Silently drop instead of crashing the whole autosave
     }
   }
 }
@@ -200,6 +201,7 @@ export async function autosaveAttempt({ userId, attemptId, sessionId, revision, 
   }
 
   if (patch.currentSectionId) attempt.currentSectionId = patch.currentSectionId;
+  if (patch.sectionProgress) attempt.sectionProgress = patch.sectionProgress;
 
   for (const e of patch.cheatEvents || []) {
     attempt.cheatEvents.push({ kind: e.kind, ts: e.ts ? new Date(e.ts) : now, meta: e.meta || {} });

@@ -1,19 +1,28 @@
-const API_URL =
-  import.meta.env.VITE_API_URL ||
-  import.meta.env.VITE_API_BASE_URL ||
-  "http://localhost:4000";
+function resolveApiBase() {
+  const raw = String(import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || "").trim();
+  if (raw && raw !== "undefined") {
+    let base = raw.replace(/\/$/, "");
+    if (/\/api$/i.test(base)) base = base.replace(/\/api$/i, "");
+    return base;
+  }
+  if (import.meta.env.DEV) return "";
+  return "http://localhost:4000";
+}
+
+const API_URL = resolveApiBase();
 
 let refreshInFlight = null;
 
 async function doFetch(path, { method = "GET", token = "", body } = {}) {
+  const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
   return fetch(`${API_URL}${path}`, {
     method,
     headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {})
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(!isFormData ? { "Content-Type": "application/json" } : {})
     },
     credentials: "include",
-    body: body ? JSON.stringify(body) : undefined
+    body: isFormData ? body : body !== undefined && body !== null ? JSON.stringify(body) : undefined
   });
 }
 
@@ -49,7 +58,7 @@ async function refreshAccessToken() {
   }
 }
 
-export async function apiFetch(path, { method = "GET", token = "", body } = {}) {
+export async function apiFetch(path, { method = "GET", token = "", body, allowOkFalse = false } = {}) {
   // Prefer latest token from localStorage, so refreshed tokens are reused.
   const initialToken = localStorage.getItem("examedge_access") || token || "";
   let res = await doFetch(path, { method, token: initialToken, body });
@@ -71,7 +80,16 @@ export async function apiFetch(path, { method = "GET", token = "", body } = {}) 
     }
   }
 
-  if (!res.ok || data?.ok === false) {
+  if (!res.ok) {
+    if (allowOkFalse && data) {
+      return data;
+    }
+    const err = new Error(data?.message || `Request failed (${res.status})`);
+    err.status = res.status;
+    err.code = data?.code || "REQUEST_FAILED";
+    throw err;
+  }
+  if (data?.ok === false && !allowOkFalse) {
     const err = new Error(data?.message || `Request failed (${res.status})`);
     err.status = res.status;
     err.code = data?.code || "REQUEST_FAILED";

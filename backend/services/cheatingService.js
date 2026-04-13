@@ -49,11 +49,24 @@ export async function createCheatingLog(input) {
   if (!mongoose.isValidObjectId(parsed.testAttemptId)) throw badRequest("Invalid testAttemptId", "INVALID_TEST_ATTEMPT_ID");
 
   const ts = parsed.timestamp ? new Date(parsed.timestamp) : new Date();
+  const normalizedType = normalizeEventType(parsed.eventType);
+
+  const recentLog = await CheatingLog.findOne({
+    userId: parsed.userId,
+    testAttemptId: parsed.testAttemptId,
+    eventType: normalizedType,
+    timestamp: { $gte: new Date(ts.getTime() - 2000), $lte: new Date(ts.getTime() + 2000) }
+  }).lean();
+
+  if (recentLog) {
+    return null;
+  }
+
   const doc = {
     userId: parsed.userId,
     testAttemptId: parsed.testAttemptId,
     examType: parsed.examType,
-    eventType: normalizeEventType(parsed.eventType),
+    eventType: normalizedType,
     timestamp: ts,
     details: parsed.details || {},
     fingerprint: toFingerprint({

@@ -19,5 +19,6 @@ CheatingLogSchema.index({ userId: 1, timestamp: -1 });
 CheatingLogSchema.index({ testAttemptId: 1, timestamp: -1 });
 CheatingLogSchema.index({ timestamp: -1 });
 CheatingLogSchema.index({ examType: 1, timestamp: -1 });
+CheatingLogSchema.index({ userId: 1, testAttemptId: 1, eventType: 1, timestamp: -1 });
 
 export const CheatingLog = mongoose.model("CheatingLog", CheatingLogSchema);

@@ -15,9 +15,7 @@ import { analyticsRoutes } from "./routes/analyticsRoutes.js";
 import { adminTestRoutes } from "./routes/adminTestRoutes.js";
 import { adminCheatingRoutes, cheatingRoutes } from "./routes/cheatingRoutes.js";
 import { testSessionRoutes } from "./routes/testSessionRoutes.js";
-import { authMiddleware } from "./middleware/authMiddleware.js";
-import { roleMiddleware } from "./middleware/roleMiddleware.js";
-import { adminBulkCreateQuestions, adminCreateQuestion, adminDeleteQuestion, adminUpdateQuestion } from "./controllers/questionController.js";
+import { adminQuestionRoutes } from "./routes/adminQuestionRoutes.js";
 
 export const app = express();
 
@@ -44,20 +42,14 @@ app.get("/api/health", (_req, res) => {
 // Public base routes (as required)
 app.use("/auth", authRoutes);
 app.use("/questions", questionRoutes);
-app.post("/admin/questions", authMiddleware(), roleMiddleware(["admin"]), adminCreateQuestion);
-app.post("/admin/questions/bulk", authMiddleware(), roleMiddleware(["admin"]), adminBulkCreateQuestions);
-app.put("/admin/questions/:id", authMiddleware(), roleMiddleware(["admin"]), adminUpdateQuestion);
-app.delete("/admin/questions/:id", authMiddleware(), roleMiddleware(["admin"]), adminDeleteQuestion);
+app.use("/admin/questions", adminQuestionRoutes);
 app.use("/tests", testRoutes);
 app.use("/analytics", analyticsRoutes);
 
 // Also expose under /api for compatibility
 app.use("/api/auth", authRoutes);
 app.use("/api/questions", questionRoutes);
-app.post("/api/admin/questions", authMiddleware(), roleMiddleware(["admin"]), adminCreateQuestion);
-app.post("/api/admin/questions/bulk", authMiddleware(), roleMiddleware(["admin"]), adminBulkCreateQuestions);
-app.put("/api/admin/questions/:id", authMiddleware(), roleMiddleware(["admin"]), adminUpdateQuestion);
-app.delete("/api/admin/questions/:id", authMiddleware(), roleMiddleware(["admin"]), adminDeleteQuestion);
+app.use("/api/admin/questions", adminQuestionRoutes);
 app.use("/api", aiGenerationRoutes);
 app.use("/api/tests", testRoutes);
 app.use("/api/test-sessions", testSessionRoutes);

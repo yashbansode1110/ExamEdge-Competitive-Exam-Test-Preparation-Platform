@@ -86,6 +86,7 @@ const TestAttemptSchema = new Schema(
     networkEvents: { type: [NetworkEventSchema], default: [] },
     sections: { type: [SectionStateSchema], default: [] },
     currentSectionId: { type: String, default: "" },
+    sectionProgress: { type: Schema.Types.Mixed, default: {} },
     responses: { type: [EvaluatedResponseSchema], default: [] },
     score: { type: Number, default: 0 },
     totalMarks: { type: Number, default: 0 },

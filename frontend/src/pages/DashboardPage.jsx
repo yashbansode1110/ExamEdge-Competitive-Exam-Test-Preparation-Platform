@@ -6,6 +6,7 @@ import { Card, CardBody } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { Alert } from "../components/ui/Alert";
 import { TestCard } from "../components/dashboard/TestCard";
+import { LandingPage } from "../components/landing/LandingPage.jsx";
 
 function normalizeExam(examValue) {
   const v = String(examValue || "").toUpperCase();
@@ -40,24 +41,7 @@ export function DashboardPage() {
   const welcomeName = useMemo(() => (user?.name ? user.name.split(" ")[0] : ""), [user?.name]);
 
   if (!accessToken) {
-    return (
-      <div className="container-centered py-12">
-        <Card className="max-w-2xl mx-auto">
-          <CardBody className="py-12 text-center">
-            <h1 className="text-3xl font-bold text-primary-700 mb-2">ExamEdge</h1>
-            <p className="text-secondary-600 mb-6">JEE Main + MHT-CET practice with exam-pattern enforcement.</p>
-            <div className="flex flex-wrap justify-center gap-3">
-              <Link to="/login">
-                <Button variant="outline">Login</Button>
-              </Link>
-              <Link to="/register">
-                <Button variant="primary">Create account</Button>
-              </Link>
-            </div>
-          </CardBody>
-        </Card>
-      </div>
-    );
+    return <LandingPage />;
   }
 
   return (

@@ -11,6 +11,8 @@ export function RootLayout() {
   const location = useLocation();
   const { user, accessToken } = useSelector((s) => s.auth);
 
+  const isGuestHome = location.pathname === "/" && !accessToken;
+
   useEffect(() => {
     let cancelled = false;
     async function loadMe() {
@@ -33,6 +35,14 @@ export function RootLayout() {
 
   if (isMinimalRoute) {
     return <Outlet />;
+  }
+
+  if (isGuestHome) {
+    return (
+      <div className="min-h-screen bg-white">
+        <Outlet />
+      </div>
+    );
   }
 
   const links = [

@@ -23,7 +23,11 @@ const SectionSchema = new Schema(
     subjects: { type: [String], required: true, default: [] },
     questionCountBySubject: { type: Schema.Types.Mixed, default: {} },
     allowedQuestionTypes: { type: [String], required: true, default: ["MCQ"] },
-    hardWindowEnforced: { type: Boolean, default: true }
+    hardWindowEnforced: { type: Boolean, default: true },
+    /** Optional filters used when building this section’s question pool (admin test generator). */
+    chapter: { type: String, default: "" },
+    topic: { type: String, default: "" },
+    difficulty: { type: Number, min: 1, max: 5, required: false }
   },
   { _id: false }
 );

@@ -80,6 +80,7 @@ export async function autosave(req, res, next) {
         sessionId: z.string().min(8),
         revision: z.number().int().min(0).optional(),
         currentSectionId: z.string().optional(),
+        sectionProgress: z.record(z.string(), z.string()).optional(),
         answers: z
           .array(
             z.object({
@@ -109,7 +110,8 @@ export async function autosave(req, res, next) {
         answers: body.answers,
         cheatEvents: body.cheatEvents,
         networkEvents: body.networkEvents,
-        currentSectionId: body.currentSectionId
+        currentSectionId: body.currentSectionId,
+        sectionProgress: body.sectionProgress
       }
     });
 

@@ -23,7 +23,7 @@ function optionListFromState(optionState) {
 export function AdminQuestionsPage() {
   const { accessToken, user } = useSelector((s) => s.auth);
 
-  const [mode, setMode] = useState("manual"); // manual | ai
+  const [mode, setMode] = useState("manual"); // manual | ai | upload
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [busy, setBusy] = useState(false);
@@ -184,6 +184,10 @@ export function AdminQuestionsPage() {
   const [aiSaving, setAiSaving] = useState(false);
   const [aiPreviewQuestions, setAiPreviewQuestions] = useState([]);
 
+  const [uploadFile, setUploadFile] = useState(null);
+  const [uploadPreview, setUploadPreview] = useState(null);
+  const [uploadBusy, setUploadBusy] = useState(false);
+
   const allowedAiSubjects = useMemo(() => {
     const v = String(aiExam || "").toUpperCase();
     if (v.includes("MHT-CET") && v.includes("PCB")) return ["Physics", "Chemistry", "Biology"];
@@ -286,6 +290,76 @@ export function AdminQuestionsPage() {
     setAiPreviewQuestions((prev) => prev.filter((_q, i) => i !== idx));
   }
 
+  async function onUploadFileChosen(e) {
+    const f = e.target.files?.[0];
+    setUploadFile(f || null);
+    setUploadPreview(null);
+    setError("");
+    if (!f) return;
+    try {
+      const text = await f.text();
+      const name = (f.name || "").toLowerCase();
+      if (name.endsWith(".json") || f.type.includes("json")) {
+        const data = JSON.parse(text);
+        const rows = Array.isArray(data) ? data : data?.questions;
+        if (!Array.isArray(rows)) throw new Error("JSON must be an array of questions or { questions: [...] }");
+        setUploadPreview({
+          kind: "json",
+          count: rows.length,
+          sample: rows.slice(0, 5)
+        });
+      } else {
+        const lines = text.split(/\r?\n/).filter((l) => l.trim().length);
+        const headers = lines[0] ? lines[0].split(",").map((h) => h.trim().replace(/^"|"$/g, "")) : [];
+        setUploadPreview({
+          kind: "csv",
+          count: Math.max(0, lines.length - 1),
+          headers,
+          sampleLines: lines.slice(1, 6)
+        });
+      }
+    } catch (err) {
+      setError(err.message || "Could not read file for preview");
+      setUploadFile(null);
+    }
+  }
+
+  async function onUploadQuestionsSubmit() {
+    if (!accessToken || !uploadFile) return;
+    setError("");
+    setSuccess("");
+    setUploadBusy(true);
+    try {
+      if (!String(user?.role || "").toLowerCase().includes("admin")) throw new Error("Admin access required");
+      const fd = new FormData();
+      fd.append("file", uploadFile);
+      const data = await apiFetch("/api/admin/questions/bulk-upload", {
+        method: "POST",
+        token: accessToken,
+        body: fd,
+        allowOkFalse: true
+      });
+      const inserted = data.insertedCount ?? 0;
+      const rowErr = data.rowErrorCount ?? 0;
+      const insErr = data.insertErrorCount ?? 0;
+      if (data.ok) {
+        setSuccess(`Uploaded successfully: ${inserted} questions inserted.`);
+        setUploadFile(null);
+        setUploadPreview(null);
+      } else {
+        setSuccess(inserted ? `${inserted} questions inserted (partial success).` : "");
+        const firstErr = data.rowErrors?.[0]?.message || data.insertErrors?.[0]?.message || data.message;
+        setError(
+          `Upload finished with issues: ${rowErr} row validation errors, ${insErr} database errors. ${firstErr ? `\nFirst issue: ${firstErr}` : "Check details in response."}`
+        );
+      }
+    } catch (err) {
+      setError(err.message || "Upload failed");
+    } finally {
+      setUploadBusy(false);
+    }
+  }
+
   if (!accessToken) return null;
 
   return (
@@ -300,7 +374,73 @@ export function AdminQuestionsPage() {
         <Button type="button" variant={mode === "ai" ? "primary" : "outline"} onClick={() => setMode("ai")}>
           Generate via AI
         </Button>
+        <Button type="button" variant={mode === "upload" ? "primary" : "outline"} onClick={() => setMode("upload")}>
+          Upload Questions
+        </Button>
       </div>
+
+      {mode === "upload" ? (
+        <Card>
+          <CardBody className="p-6">
+            <h2 className="text-xl font-bold text-secondary-900 mb-1">Bulk upload (CSV / JSON)</h2>
+            <p className="text-sm text-secondary-600 mb-4">
+              Required fields per row: <strong>questionText</strong> (or text), <strong>options</strong> (JSON array of {"{key,text}"} or columns{" "}
+              <strong>optionA</strong>…<strong>optionD</strong>), <strong>correctAnswer</strong> (option key), <strong>subject</strong>,{" "}
+              <strong>chapter</strong>, <strong>difficulty</strong> (1–5 or easy/medium/hard), <strong>exam</strong> (e.g. JEE Main (PCM)).
+            </p>
+
+            <div className="space-y-3">
+              <label className="block text-sm font-medium text-secondary-900">
+                Choose file (.csv or .json)
+                <input
+                  type="file"
+                  accept=".csv,.json,text/csv,application/json"
+                  className="mt-1 block w-full text-sm text-secondary-700"
+                  onChange={onUploadFileChosen}
+                />
+              </label>
+
+              {uploadPreview ? (
+                <div className="rounded-lg border border-secondary-200 bg-secondary-50 p-4 text-sm">
+                  <div className="font-semibold text-secondary-900 mb-2">
+                    Preview — {uploadPreview.count} row{uploadPreview.count === 1 ? "" : "s"} detected ({uploadPreview.kind})
+                  </div>
+                  {uploadPreview.kind === "json" ? (
+                    <ul className="list-disc pl-5 space-y-1 text-secondary-800">
+                      {uploadPreview.sample.map((row, i) => (
+                        <li key={i}>
+                          <span className="text-secondary-600">#{i + 1}</span>{" "}
+                          {(row.questionText || row.text || "").slice(0, 120)}
+                          {(row.questionText || row.text || "").length > 120 ? "…" : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="text-xs text-secondary-600">Headers: {uploadPreview.headers.join(", ")}</div>
+                      <pre className="text-xs overflow-x-auto whitespace-pre-wrap font-mono bg-white border border-secondary-200 rounded p-2 max-h-40">
+                        {uploadPreview.sampleLines.join("\n")}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              ) : null}
+
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  type="button"
+                  variant="primary"
+                  disabled={uploadBusy || !uploadFile}
+                  isLoading={uploadBusy}
+                  onClick={onUploadQuestionsSubmit}
+                >
+                  {uploadBusy ? "Uploading…" : "Upload to database"}
+                </Button>
+              </div>
+            </div>
+          </CardBody>
+        </Card>
+      ) : null}
 
       {mode === "manual" ? (
         <Card>

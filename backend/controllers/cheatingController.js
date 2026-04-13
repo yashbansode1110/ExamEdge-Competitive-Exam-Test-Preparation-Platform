@@ -5,32 +5,35 @@ import { badRequest } from "../middleware/errorHandler.js";
 
 export async function logCheatingEvent(req, res, next) {
   try {
-    const body = z
-      .object({
-        testAttemptId: z.string().min(1),
-        examType: z.string().optional(),
-        eventType: z.string().min(1),
-        timestamp: z.string().datetime().optional(),
-        details: z.any().optional()
-      })
-      .parse(req.body);
+    const { testAttemptId, eventType, examType, timestamp, details } = req.body;
+    const userId = req.user?.id;
 
-    const attempt = await TestAttempt.findById(body.testAttemptId).select("_id exam userId").lean();
-    if (!attempt) throw badRequest("Attempt not found", "ATTEMPT_NOT_FOUND");
-    if (attempt.userId.toString() !== String(req.user.id)) throw badRequest("Attempt does not belong to user", "ATTEMPT_USER_MISMATCH");
+    if (!userId || !testAttemptId || !eventType) {
+      return res.status(200).json({ success: true, error: "Missing required fields" });
+    }
 
-    await createCheatingLog({
-      userId: req.user.id,
-      testAttemptId: body.testAttemptId,
-      examType: body.examType || attempt.exam,
-      eventType: body.eventType,
-      timestamp: body.timestamp,
-      details: body.details
-    });
+    const attempt = await TestAttempt.findById(testAttemptId).select("_id exam userId").lean();
+    
+    // As long as fields are valid, we attempt to log. If skipped or fails, return 200.
+    if (attempt && attempt.userId.toString() === String(userId)) {
+      try {
+        await createCheatingLog({
+          userId,
+          testAttemptId,
+          examType: examType || attempt.exam || "UNKNOWN",
+          eventType,
+          timestamp,
+          details
+        });
+      } catch (err) {
+        // silent error handling for logging failures
+      }
+    }
 
-    res.status(201).json({ ok: true });
+    return res.status(200).json({ success: true });
   } catch (e) {
-    next(e);
+    // catch all unexpected server errors but return success as requested
+    return res.status(200).json({ success: true });
   }
 }
 

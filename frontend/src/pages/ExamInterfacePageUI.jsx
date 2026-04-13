@@ -5,13 +5,14 @@ import { apiFetch } from "../services/api.js";
 import { ExamShell } from "../components/exam/ExamShell.jsx";
 import { ExamLayoutJEE } from "../components/exam/layouts/ExamLayoutJEE.jsx";
 import { ExamLayoutMHTCET } from "../components/exam/layouts/ExamLayoutMHTCET.jsx";
+import { ExamSecurityLayer } from "../components/exam/ExamSecurityLayer.jsx";
 import { useExamSecurity } from "../utils/useExamSecurity.js";
 import { Modal } from "../components/ui/Modal.jsx";
 
 export function ExamInterfacePageUI() {
   const { testId: testSessionId } = useParams();
   const nav = useNavigate();
-  const { accessToken } = useSelector((s) => s.auth);
+  const { accessToken, user } = useSelector((s) => s.auth);
 
   const [error, setError] = useState("");
   const [test, setTest] = useState(null);
@@ -40,6 +41,7 @@ export function ExamInterfacePageUI() {
   });
   const [activeSection, setActiveSection] = useState(null); // null | physics | chemistry | mathematics | biology
   const [showStartSectionModal, setShowStartSectionModal] = useState(false);
+  const [pendingSectionSwitch, setPendingSectionSwitch] = useState(null);
   const showError = useCallback((message) => setError(message), []);
 
   const activeQStartedAtRef = useRef(Date.now());
@@ -380,6 +382,7 @@ export function ExamInterfacePageUI() {
             answers: payloadAnswers,
             cheatEvents,
             networkEvents,
+            sectionProgress: sectionStatusRef.current,
             meta: { reason },
           },
         });
@@ -774,22 +777,14 @@ return (
       return;
     }
 
-    setSectionStatus((prev) => {
-      let updated = {
-        ...prev,
-        [active]: "completed"
-      };
-      if (updated.physics === "completed" && updated.chemistry === "completed") {
-        updated.mathematics = "not-started";
-        updated.biology = "not-started";
-      }
-      updated[target] = updated[target] === "completed" ? "completed" : "in-progress";
-      return updated;
+    let finalUpdated = { ...updatedStatus };
+    finalUpdated[target] = finalUpdated[target] === "completed" ? "completed" : "in-progress";
+
+    setPendingSectionSwitch({
+      active,
+      target,
+      updatedStatus: finalUpdated
     });
-    setActiveSection(target);
-    const idx = (questionIndexesByMhtSection[target] || [])[0];
-    if (typeof idx === "number") goToQuestion(idx);
-    autosave({ reason: "section_switch" });
   }
 
   useEffect(() => {
@@ -856,19 +851,22 @@ return (
 
   if (!attempt || !test) {
     return (
-      <ExamShell variant={test?.exam?.includes("MHT") ? "mhtcet" : "jee"}>
-        <div className="flex items-center justify-center p-6">
-          <div className="w-full max-w-xl rounded-lg border border-secondary-200 bg-white p-6 text-secondary-700">
-            Loading exam interface…
-            {error ? <div className="mt-3 text-sm text-error-600">{error}</div> : null}
+      <ExamSecurityLayer userId={user?.id || user?._id} testAttemptId={attempt?.id}>
+        <ExamShell variant={test?.exam?.includes("MHT") ? "mhtcet" : "jee"}>
+          <div className="flex items-center justify-center p-6">
+            <div className="w-full max-w-xl rounded-lg border border-secondary-200 bg-white p-6 text-secondary-700">
+              Loading exam interface…
+              {error ? <div className="mt-3 text-sm text-error-600">{error}</div> : null}
+            </div>
           </div>
-        </div>
-      </ExamShell>
+        </ExamShell>
+      </ExamSecurityLayer>
     );
   }
 
   return (
-    <ExamShell variant={isMht ? "mhtcet" : "jee"}>
+    <ExamSecurityLayer userId={user?.id || user?._id} testAttemptId={attempt?.id}>
+      <ExamShell variant={isMht ? "mhtcet" : "jee"}>
       {error ? (
         <div className="mb-2 px-4">
           <div className="rounded-lg border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700">
@@ -1009,7 +1007,31 @@ return (
           </button>
         </div>
       </Modal>
+
+      <Modal
+        isOpen={!!pendingSectionSwitch}
+        onClose={() => setPendingSectionSwitch(null)}
+        title={pendingSectionSwitch?.active === "physics" || pendingSectionSwitch?.active === "chemistry" ? `Submit ${displaySubjectNameFromKey(pendingSectionSwitch?.active)} section?` : `Start ${displaySubjectNameFromKey(pendingSectionSwitch?.target)} section?`}
+        submitLabel="Confirm"
+        closeLabel="Cancel"
+        onSubmit={async () => {
+           const { target, updatedStatus } = pendingSectionSwitch;
+           setSectionStatus(updatedStatus);
+           setActiveSection(target);
+           const idx = (questionIndexesByMhtSection[target] || [])[0];
+           if (typeof idx === "number") goToQuestion(idx);
+           await autosave({ reason: "section_switch" });
+           setPendingSectionSwitch(null);
+        }}
+      >
+        <p className="text-sm text-secondary-700">
+           {pendingSectionSwitch?.target === "mathematics" || pendingSectionSwitch?.target === "biology" 
+             ? `You are about to start the ${displaySubjectNameFromKey(pendingSectionSwitch?.target)} section. Once you start it, you cannot go back.`
+             : `Are you sure you want to submit the ${displaySubjectNameFromKey(pendingSectionSwitch?.active)} section? You will not be able to change your answers.`}
+        </p>
+      </Modal>
     </ExamShell>
+    </ExamSecurityLayer>
   );
 }
 

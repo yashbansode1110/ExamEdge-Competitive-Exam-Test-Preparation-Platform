@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindConfig from "./tailwind.config.js";
 
@@ -53,16 +53,29 @@ function postFixLog() {
   }
 }
 
-export default defineConfig({
-  plugins: [
-    react(),
-    {
-      name: "debug-tailwind-postfix",
-      configureServer() {
-        postFixLog();
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), "");
+  const backendTarget = env.VITE_DEV_BACKEND_URL || "http://127.0.0.1:4001";
+
+  return {
+    plugins: [
+      react(),
+      {
+        name: "debug-tailwind-postfix",
+        configureServer() {
+          postFixLog();
+        },
+      },
+    ],
+    server: {
+      port: 5173,
+      proxy: {
+        "/api": { target: backendTarget, changeOrigin: true },
+        "/auth": { target: backendTarget, changeOrigin: true },
+        "/tests": { target: backendTarget, changeOrigin: true },
+        "/analytics": { target: backendTarget, changeOrigin: true },
       },
     },
-  ],
-  server: { port: 5173 }
+  };
 });
 

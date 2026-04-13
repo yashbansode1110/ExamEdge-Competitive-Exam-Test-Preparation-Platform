@@ -7,6 +7,7 @@ import { QuestionPaletteVirtual } from "../components/exam/QuestionPaletteVirtua
 import { QuestionPane } from "../components/exam/QuestionPane.jsx";
 import { SectionTabs } from "../components/exam/SectionTabs.jsx";
 import { TimerBar } from "../components/exam/TimerBar.jsx";
+import { ExamSecurityLayer } from "../components/exam/ExamSecurityLayer.jsx";
 import { useExamSecurity } from "../utils/useExamSecurity.js";
 
 function getOrCreateSessionId(key) {
@@ -25,7 +26,7 @@ function msLeft(endsAt) {
 export function ExamInterfacePage() {
   const { testId } = useParams();
   const nav = useNavigate();
-  const { accessToken } = useSelector((s) => s.auth);
+  const { accessToken, user } = useSelector((s) => s.auth);
 
   const [error, setError] = useState("");
   const [test, setTest] = useState(null);
@@ -259,7 +260,8 @@ export function ExamInterfacePage() {
   }
 
   return (
-    <ExamShell variant={test.exam?.includes("MHT") ? "mhtcet" : "jee"}>
+    <ExamSecurityLayer userId={user?.id || user?._id} testAttemptId={attempt?.id}>
+      <ExamShell variant={test.exam?.includes("MHT") ? "mhtcet" : "jee"}>
       <div className="border-b border-slate-800 bg-slate-950/40 px-3 py-2 backdrop-blur">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-[220px]">
@@ -371,7 +373,8 @@ export function ExamInterfacePage() {
           )}
         </div>
       </div>
-    </ExamShell>
+      </ExamShell>
+    </ExamSecurityLayer>
   );
 }
 

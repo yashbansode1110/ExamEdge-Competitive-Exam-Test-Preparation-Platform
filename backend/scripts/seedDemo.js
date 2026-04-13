@@ -97,12 +97,35 @@ function demoQuestionsForSubject(subject, count) {
   return out;
 }
 
+/**
+ * Creates or resets seeded demo users so `npm run seed:demo` always matches README credentials.
+ * (A prior register attempt or old hash would otherwise keep login returning 401.)
+ */
 async function ensureUser({ email, password, name, role }) {
   const lowered = String(email).toLowerCase();
-  const existing = await User.findOne({ email: lowered }).select("_id role");
-  if (existing) return existing;
-
   const passwordHash = await bcrypt.hash(password, 12);
+
+  const existing = await User.findOne({ email: lowered }).select("+passwordHash role name student");
+  if (existing) {
+    existing.name = name;
+    existing.role = role;
+    existing.passwordHash = passwordHash;
+    existing.failedLoginCount = 0;
+    existing.lockUntil = undefined;
+    existing.banned = false;
+    if (role === "student") {
+      existing.student = {
+        targetExam: existing.student?.targetExam || "JEE Main",
+        class: existing.student?.class || "11",
+        streak: existing.student?.streak ?? 0,
+        xpPoints: existing.student?.xpPoints ?? 0,
+        weakTopics: existing.student?.weakTopics || [],
+        practiceHistory: existing.student?.practiceHistory || []
+      };
+    }
+    await existing.save();
+    return existing;
+  }
 
   const doc = {
     email: lowered,

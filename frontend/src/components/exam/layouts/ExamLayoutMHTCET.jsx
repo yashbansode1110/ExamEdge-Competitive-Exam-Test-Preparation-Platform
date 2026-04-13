@@ -93,8 +93,7 @@ export function ExamLayoutMHTCET({
                   <button
                     key={s}
                     type="button"
-                    onClick={() => onSwitchSubject?.(s)}
-                    disabled={sectionStatus?.[s] === "locked"}
+                    disabled={true}
                     className={`px-3 py-1.5 rounded-md border text-xs font-semibold ${
                       activeSubject === s
                         ? "border-primary-500 bg-primary-50 text-primary-700"

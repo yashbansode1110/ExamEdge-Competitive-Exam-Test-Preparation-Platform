@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { z } from "zod";
 import { Question } from "../models/Question.js";
 import { badRequest, notFound } from "../middleware/errorHandler.js";
+import { buildQuestionDocsFromRows, parseCsvBuffer, parseJsonBuffer } from "../services/bulkQuestionImport.js";
 
 const PUBLIC_SELECT =
   "exam subject chapter topic subtopic type difficulty text latex statement options tags source year isActive createdAt";
@@ -248,6 +249,79 @@ export async function adminBulkCreateQuestions(req, res, next) {
       failedCount: failures.length,
       createdIds,
       failures
+    });
+  } catch (e) {
+    next(e);
+  }
+}
+
+/**
+ * Multipart file upload: .csv or .json. Validates rows and uses insertMany (single DB round-trip).
+ */
+export async function adminBulkUploadQuestions(req, res, next) {
+  try {
+    const file = req.file;
+    if (!file?.buffer) throw badRequest("Missing file field `file`", "NO_FILE");
+
+    const name = String(file.originalname || "").toLowerCase();
+    const mime = String(file.mimetype || "");
+    const isJson = name.endsWith(".json") || mime.includes("json");
+
+    let rows;
+    try {
+      rows = isJson ? parseJsonBuffer(file.buffer) : await parseCsvBuffer(file.buffer);
+    } catch (e) {
+      throw badRequest(e?.message || "Failed to parse file", "PARSE_ERROR");
+    }
+
+    if (!rows.length) throw badRequest("File contains no rows", "EMPTY_FILE");
+    if (rows.length > 2000) throw badRequest("Maximum 2000 rows per upload", "TOO_MANY_ROWS");
+
+    const { docs, rowErrors } = buildQuestionDocsFromRows(rows);
+    if (!docs.length) {
+      return res.status(400).json({
+        ok: false,
+        message: rowErrors.length ? `Validation failed for all rows. First error: row 1 - ${rowErrors[0].message}` : "No valid questions found",
+        insertedCount: 0,
+        duplicateCount: 0,
+        rowErrorCount: rowErrors.length,
+        rowErrors,
+        insertErrors: []
+      });
+    }
+
+    let insertedCount = 0;
+    const insertErrors = [];
+
+    try {
+      const inserted = await Question.insertMany(docs, { ordered: false });
+      insertedCount = inserted.length;
+    } catch (e) {
+      if (Array.isArray(e?.insertedDocs) && e.insertedDocs.length) insertedCount = e.insertedDocs.length;
+      if (typeof e?.insertedCount === "number" && e.insertedCount > insertedCount) insertedCount = e.insertedCount;
+      const writeErrors = e?.writeErrors || e?.result?.writeErrors || e?.result?.result?.writeErrors;
+      if (Array.isArray(writeErrors) && writeErrors.length) {
+        for (const we of writeErrors) {
+          insertErrors.push({
+            index: we.index,
+            code: we.code,
+            message: we.errmsg || we.err?.message || "Write error"
+          });
+        }
+      } else if (insertedCount === 0) {
+        return next(e);
+      }
+    }
+
+    const ok = rowErrors.length === 0 && insertErrors.length === 0;
+    res.status(ok ? 201 : 207).json({
+      ok,
+      totalRows: rows.length,
+      insertedCount,
+      rowErrorCount: rowErrors.length,
+      rowErrors,
+      insertErrorCount: insertErrors.length,
+      insertErrors
     });
   } catch (e) {
     next(e);
