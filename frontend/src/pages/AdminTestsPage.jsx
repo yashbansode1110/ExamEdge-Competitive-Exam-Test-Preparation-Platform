@@ -119,11 +119,13 @@ export function AdminTestsPage() {
     };
   }, [accessToken]);
 
+  const subjectsStr = Object.keys(subjectCounts).join(",");
+
   useEffect(() => {
     let cancelled = false;
     async function loadAvailability() {
       if (!accessToken) return;
-      const subjects = Object.keys(subjectCounts).filter((s) => Number(subjectCounts[s]) >= 0);
+      const subjects = subjectsStr.split(",").filter(Boolean);
       const out = {};
       await Promise.all(
         subjects.map(async (subject) => {
@@ -143,7 +145,7 @@ export function AdminTestsPage() {
     return () => {
       cancelled = true;
     };
-  }, [accessToken, exam, subjectCounts]);
+  }, [accessToken, exam, subjectsStr]);
 
   const parsedSections = useMemo(() => {
     try {

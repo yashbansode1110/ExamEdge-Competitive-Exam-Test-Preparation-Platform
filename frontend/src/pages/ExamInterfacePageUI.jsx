@@ -24,6 +24,8 @@ export function ExamInterfacePageUI() {
   const [visitedQuestions, setVisitedQuestions] = useState(() => new Set());
   const [revision, setRevision] = useState(0);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
+  const [showSectionSubmitModal, setShowSectionSubmitModal] = useState(false);
+  const [completedSections, setCompletedSections] = useState([]);
   const [subjectTimers, setSubjectTimers] = useState({ physics: 0, chemistry: 0, math: 0, biology: 0 });
   const [activeSubject, setActiveSubject] = useState("physics");
   const isMht = test?.exam?.includes("MHT");
@@ -293,12 +295,28 @@ export function ExamInterfacePageUI() {
     return () => clearInterval(id);
   }, []);
 
+  const [timerOffsetMs, setTimerOffsetMs] = useState(() => {
+    return Number(localStorage.getItem(`ee_timer_offset_${attempt?.id}`) || 0);
+  });
+  const interfaceMountTimeRef = useRef(Date.now());
+
+  useEffect(() => {
+    if (isMht && activeSection && timerOffsetMs === 0) {
+      const offset = Date.now() - interfaceMountTimeRef.current;
+      setTimerOffsetMs(offset);
+      if (attempt?.id) localStorage.setItem(`ee_timer_offset_${attempt.id}`, offset.toString());
+    }
+  }, [isMht, activeSection, timerOffsetMs, attempt?.id]);
+
   const timeLeftSec = useMemo(() => {
     if (!attempt?.endsAt) return 0;
-    const t = new Date(attempt.endsAt).getTime();
+    if (isMht && !activeSection) {
+      return Math.max(0, Math.floor(Number(test?.durationMs || 0) / 1000));
+    }
+    const t = new Date(attempt.endsAt).getTime() + timerOffsetMs;
     if (Number.isNaN(t)) return 0;
     return Math.max(0, Math.floor((t - Date.now()) / 1000));
-  }, [attempt?.endsAt, timeTick]);
+  }, [attempt?.endsAt, timeTick, isMht, activeSection, test?.durationMs, timerOffsetMs]);
 
   const timeLeftSecRef = useRef(0);
   useEffect(() => {
@@ -503,7 +521,7 @@ export function ExamInterfacePageUI() {
 
   useEffect(() => {
     if (!attempt?.id || !endsAt) return;
-    const endsAtTime = new Date(endsAt).getTime();
+    const endsAtTime = new Date(endsAt).getTime() + timerOffsetMs;
     if (Number.isNaN(endsAtTime)) return;
 
     const id = setInterval(() => {
@@ -515,7 +533,7 @@ export function ExamInterfacePageUI() {
     }, 500);
 
     return () => clearInterval(id);
-  }, [attempt?.id, endsAt, autosave, onSubmit]);
+  }, [attempt?.id, endsAt, autosave, onSubmit, timerOffsetMs]);
 
   const currentQuestion = questions[currentIndex];
   const currentAnswer = currentQuestion ? answers.get(String(currentQuestion._id)) || {} : {};
@@ -658,19 +676,46 @@ export function ExamInterfacePageUI() {
     const prevIdx = activeMhtIndexes[mhtCurrentPos - 1];
     if (typeof prevIdx === "number") goToQuestion(prevIdx);
   }, [mhtCanGoBack, activeMhtIndexes, mhtCurrentPos, goToQuestion]);
+
+  const isSectionCompleted = useCallback(
+    (sectionKey) => {
+      if (!sectionKey) return false;
+      const idxs = questionIndexesByMhtSection[sectionKey] || [];
+      return idxs.every((idx) => {
+        const q = questions[idx];
+        if (!q) return true;
+        // The prompt asked for: questions.every(q => answers[q.id] !== undefined);
+        const ans = answers.get(String(q._id));
+        const visited = visitedQuestions.has(String(q._id));
+        return ans !== undefined || visited;
+      });
+    },
+    [questionIndexesByMhtSection, questions, answers, visitedQuestions]
+  );
+
   const mhtOnNext = useCallback(() => {
-    if (!mhtCanGoNext) return;
+    if (!mhtCanGoNext) {
+      if (isSectionCompleted(activeSection)) {
+        console.log(`[DEBUG GUARD] Section completed, modal opens for section: ${activeSection}`);
+        setShowSectionSubmitModal(true);
+      }
+      return;
+    }
     const nextIdx = activeMhtIndexes[mhtCurrentPos + 1];
     if (typeof nextIdx === "number") goToQuestion(nextIdx);
-  }, [mhtCanGoNext, activeMhtIndexes, mhtCurrentPos, goToQuestion]);
+  }, [mhtCanGoNext, activeMhtIndexes, mhtCurrentPos, goToQuestion, isSectionCompleted, activeSection]);
   const mhtOrderedSubjects = useMemo(() => {
     const order = ["physics", "chemistry", "mathematics", "biology"];
     return order.filter((s) => mhtSubjects.includes(s));
   }, [mhtSubjects]);
   const mhtNextSubject = useMemo(() => {
     if (!activeSection) return null;
-    if (activeSection === "physics" && sectionStatus.chemistry !== "completed") return "chemistry";
-    if (activeSection === "chemistry" && sectionStatus.physics !== "completed") return "physics";
+    if (activeSection === "physics") {
+      return sectionStatus.chemistry === "locked" ? "chemistry" : (mhtOrderedSubjects.includes("mathematics") && sectionStatus.mathematics !== "completed" ? "mathematics" : null);
+    }
+    if (activeSection === "chemistry") {
+      return sectionStatus.physics === "locked" ? "physics" : (mhtOrderedSubjects.includes("mathematics") && sectionStatus.mathematics !== "completed" ? "mathematics" : null);
+    }
     if (sectionStatus.physics === "completed" && sectionStatus.chemistry === "completed") {
       if (mhtOrderedSubjects.includes("mathematics") && sectionStatus.mathematics !== "completed") return "mathematics";
       if (mhtOrderedSubjects.includes("biology") && sectionStatus.biology !== "completed") return "biology";
@@ -678,27 +723,14 @@ export function ExamInterfacePageUI() {
     return null;
   }, [activeSection, mhtOrderedSubjects, sectionStatus]);
   const onNextMhtSubject = useCallback(() => {
-    if (!mhtNextSubject) return;
-    handleSectionSwitch(mhtNextSubject);
-  }, [mhtNextSubject]);
+    if (isSectionCompleted(activeSection)) {
+      setShowSectionSubmitModal(true);
+    } else {
+      showError("Complete current section first");
+    }
+  }, [activeSection, isSectionCompleted]);
 
-  const isMhtSectionCompleted = useCallback(
-    (sectionKey) => {
-      if (!sectionKey) return false;
-      const idxs = questionIndexesByMhtSection[sectionKey] || [];
-      return idxs.every((idx) => {
-        const q = questions[idx];
-        if (!q) return false;
-        const ans = answers.get(String(q._id));
 
-return (
-  (q.type === "MCQ" && typeof ans?.selectedOptionKey === "string") ||
-  (q.type === "NUMERICAL" && typeof ans?.numericalValue === "number")
-);
-      });
-    },
-    [questionIndexesByMhtSection, questions, answers]
-  );
 
   const mhtActivateSection = useCallback(
     (nextSection) => {
@@ -750,7 +782,7 @@ return (
       return;
     }
 
-    const isCompleted = isMhtSectionCompleted(active);
+    const isCompleted = isSectionCompleted(active);
 
     // FIRST update status snapshot before validation branch
     let updatedStatus = {
@@ -848,6 +880,41 @@ return (
     }
     setActiveSection(null);
   }, [isMht, sectionTimers, mhtActivateSection]);
+
+  const handleConfirmSectionSubmit = useCallback(async () => {
+    setShowSectionSubmitModal(false);
+    
+    // 1. mark section as completed + update completedSections
+    setCompletedSections((prev) => [...prev, activeSection]);
+    console.log(`[DEBUG GUARD] Section completes: ${activeSection}`);
+    
+    let targetSection = null;
+
+    // 2. unlock next section & lock current section
+    setSectionStatus((prev) => {
+      const nextStatus = { ...prev };
+      nextStatus[activeSection] = "completed"; // lock current
+      
+      if (activeSection === "physics") {
+         targetSection = prev.chemistry === "locked" ? "chemistry" : (mhtOrderedSubjects.includes("mathematics") ? "mathematics" : "biology");
+      } else if (activeSection === "chemistry") {
+         targetSection = prev.physics === "locked" ? "physics" : (mhtOrderedSubjects.includes("mathematics") ? "mathematics" : "biology");
+      }
+
+      if (targetSection && nextStatus[targetSection] === "locked") {
+        nextStatus[targetSection] = "not-started";
+        console.log(`[DEBUG GUARD] Next section unlocks: ${targetSection}`);
+      }
+      return nextStatus;
+    });
+
+    // 3. Navigate
+    setTimeout(() => {
+      if (targetSection) mhtActivateSection(targetSection);
+    }, 0);
+    
+    await autosave({ reason: "section_submit" });
+  }, [activeSection, mhtActivateSection, autosave, mhtOrderedSubjects]);
 
   if (!attempt || !test) {
     return (
@@ -989,6 +1056,7 @@ return (
             onClick={async () => {
               await requestFullscreenSafe();
               setShowStartSectionModal(false);
+              setSectionStatus(prev => ({ ...prev, chemistry: "locked", physics: "in-progress" }));
               mhtActivateSection("physics");
             }}
           >
@@ -1000,6 +1068,7 @@ return (
             onClick={async () => {
               await requestFullscreenSafe();
               setShowStartSectionModal(false);
+              setSectionStatus(prev => ({ ...prev, physics: "locked", chemistry: "in-progress" }));
               mhtActivateSection("chemistry");
             }}
           >
@@ -1028,6 +1097,18 @@ return (
            {pendingSectionSwitch?.target === "mathematics" || pendingSectionSwitch?.target === "biology" 
              ? `You are about to start the ${displaySubjectNameFromKey(pendingSectionSwitch?.target)} section. Once you start it, you cannot go back.`
              : `Are you sure you want to submit the ${displaySubjectNameFromKey(pendingSectionSwitch?.active)} section? You will not be able to change your answers.`}
+        </p>
+      </Modal>
+      <Modal
+        isOpen={showSectionSubmitModal}
+        onClose={() => setShowSectionSubmitModal(false)}
+        title={`Submit ${displaySubjectNameFromKey(activeSection)}?`}
+        submitLabel="Confirm"
+        closeLabel="Cancel"
+        onSubmit={handleConfirmSectionSubmit}
+      >
+        <p className="text-sm text-secondary-700">
+          Are you sure you want to submit the {displaySubjectNameFromKey(activeSection)} section? You will not be able to return to it.
         </p>
       </Modal>
     </ExamShell>
