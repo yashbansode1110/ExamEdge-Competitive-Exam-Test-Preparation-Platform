@@ -1,19 +1,23 @@
 import { Readable } from "stream";
 import csvParser from "csv-parser";
 
-function normKey(row, ...aliases) {
+function getRawKey(row, ...aliases) {
   const keys = Object.keys(row || {});
   const map = new Map();
   for (const k of keys) {
-    // Strip BOM or zero width spaces so the first column matches correctly
     const cleanK = String(k).replace(/^[\uFEFF\u200B]+/, "").trim().toLowerCase().replace(/\s+/g, "");
     map.set(cleanK, row[k]);
   }
   for (const a of aliases) {
     const cleanA = String(a).replace(/^[\uFEFF\u200B]+/, "").trim().toLowerCase().replace(/\s+/g, "");
-    const v = map.get(cleanA);
-    if (v != null && String(v).trim() !== "") return String(v).trim();
+    if (map.has(cleanA) && map.get(cleanA) != null) return map.get(cleanA);
   }
+  return null;
+}
+
+function normKey(row, ...aliases) {
+  const v = getRawKey(row, ...aliases);
+  if (v != null && String(v).trim() !== "") return String(v).trim();
   return "";
 }
 
@@ -33,25 +37,49 @@ function normalizeDifficulty(raw) {
 }
 
 function parseOptionsFromRow(row) {
-  const optJson = normKey(row, "options", "optionjson", "choices");
-  if (optJson) {
-    try {
-      const parsed = JSON.parse(optJson);
-      if (!Array.isArray(parsed)) return null;
-      return parsed
-        .map((o) => {
-          if (o && typeof o === "object" && o.key && o.text) return { key: String(o.key).trim(), text: String(o.text).trim() };
-          return null;
-        })
-        .filter(Boolean);
-    } catch {
-      return null;
+  const rawOpt = getRawKey(row, "options", "optionjson", "choices");
+  if (rawOpt != null) {
+    let parsed = rawOpt;
+    if (typeof rawOpt === "string") {
+      try {
+        parsed = JSON.parse(rawOpt);
+      } catch {
+        parsed = null;
+      }
+    }
+    if (Array.isArray(parsed)) {
+      const formatted = parsed.map((o, idx) => {
+        if (o && typeof o === "object") {
+          const k = getRawKey(o, "key", "id", "option", "letter");
+          const t = getRawKey(o, "text", "value", "content", "label", "body");
+          if (k != null && t != null) return { key: String(k).trim().toUpperCase(), text: String(t).trim() };
+          if (t != null) return { key: ["A", "B", "C", "D", "E", "F"][idx] || String(idx + 1), text: String(t).trim() };
+          if (o.key != null && o.text != null) return { key: String(o.key).trim().toUpperCase(), text: String(o.text).trim() };
+        }
+        if (typeof o === "string" || typeof o === "number") {
+          return { key: ["A", "B", "C", "D", "E", "F"][idx] || String(idx + 1), text: String(o).trim() };
+        }
+        return null;
+      }).filter(Boolean);
+      if (formatted.length >= 2) return formatted;
+    } else if (parsed && typeof parsed === "object") {
+      const keys = Object.keys(parsed);
+      const formatted = keys.map(k => {
+        const v = parsed[k];
+        if (v != null && String(v).trim() !== "") {
+          return { key: String(k).trim().toUpperCase(), text: String(v).trim() };
+        }
+        return null;
+      }).filter(Boolean);
+      if (formatted.length >= 2) return formatted;
     }
   }
   const out = [];
   const letters = ["A", "B", "C", "D", "E", "F"];
-  for (const L of letters) {
-    const t = normKey(row, `option${L.toLowerCase()}`, `opt${L.toLowerCase()}`, L);
+  for (let i = 0; i < letters.length; i++) {
+    const L = letters[i];
+    const num = String(i + 1);
+    const t = normKey(row, `option${L.toLowerCase()}`, `opt${L.toLowerCase()}`, L, `option${num}`, `opt${num}`, num, `choice${num}`, `choice${L.toLowerCase()}`);
     if (t) out.push({ key: L, text: t });
   }
   return out.length >= 2 ? out : null;
@@ -63,13 +91,14 @@ function parseOptionsFromRow(row) {
  */
 export function rowToQuestionDoc(row, rowIndex) {
   const text = normKey(row, "questiontext", "text", "question", "stem");
-  const exam = normKey(row, "exam");
+  let exam = normKey(row, "exam");
+  if (exam && exam.toUpperCase() === "JEE") exam = "JEE Main";
   const subject = normKey(row, "subject");
   const chapter = normKey(row, "chapter");
   const topic = normKey(row, "topic") || chapter || "General";
   const subtopic = normKey(row, "subtopic") || "";
 
-  const correctRaw = normKey(row, "correctanswer", "correctoptionkey", "correct", "answer");
+  const correctRaw = normKey(row, "correctanswer", "correctans", "correctoptionkey", "correct", "answer");
 
   const options = parseOptionsFromRow(row);
   const difficulty = normalizeDifficulty(normKey(row, "difficulty") || row.difficulty);
@@ -79,9 +108,19 @@ export function rowToQuestionDoc(row, rowIndex) {
   if (!subject) throw new Error("subject is required");
   if (!chapter) throw new Error("chapter is required");
   if (!options || options.length < 2) throw new Error("options must have at least 2 entries (JSON array or optionA…optionD columns)");
-  const cr = String(correctRaw || "").trim();
+  
+  let cr = String(correctRaw || "").trim();
   if (!cr) throw new Error("correctAnswer is required");
-  const crUp = cr.toUpperCase();
+  
+  cr = cr.toUpperCase();
+  if (cr === "1") cr = "A";
+  else if (cr === "2") cr = "B";
+  else if (cr === "3") cr = "C";
+  else if (cr === "4") cr = "D";
+  else if (cr === "5") cr = "E";
+  else if (cr === "6") cr = "F";
+  
+  const crUp = cr;
   const matched = options.find((o) => String(o.key).trim().toUpperCase() === crUp);
   if (!matched) throw new Error("correctAnswer must match an option key");
   const correctOptionKey = matched.key;

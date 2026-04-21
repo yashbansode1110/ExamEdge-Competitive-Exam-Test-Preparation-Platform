@@ -41,18 +41,20 @@ const TestSessionSchema = new Schema(
     // MHT-CET section flow state
     // -----------------------------
     sectionTimers: {
+      pc: { type: Number, default: 0, min: 0 },
       physics: { type: Number, default: 0, min: 0 },
       chemistry: { type: Number, default: 0, min: 0 },
       mathematics: { type: Number, default: 0, min: 0 },
       biology: { type: Number, default: 0, min: 0 }
     },
     sectionStatus: {
+      pc: { type: String, default: "not-started", enum: ["not-started", "in-progress", "completed"] },
       physics: { type: String, default: "not-started", enum: ["not-started", "in-progress", "completed"] },
       chemistry: { type: String, default: "not-started", enum: ["not-started", "in-progress", "completed"] },
       mathematics: { type: String, default: "locked", enum: ["locked", "not-started", "in-progress", "completed"] },
       biology: { type: String, default: "locked", enum: ["locked", "not-started", "in-progress", "completed"] }
     },
-    activeSection: { type: String, default: "", enum: ["", "physics", "chemistry", "mathematics", "biology"] }
+    activeSection: { type: String, default: "", enum: ["", "pc", "physics", "chemistry", "mathematics", "biology"] }
   },
   { timestamps: true }
 );

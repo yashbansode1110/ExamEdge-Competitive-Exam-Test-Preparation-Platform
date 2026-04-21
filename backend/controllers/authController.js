@@ -89,7 +89,7 @@ export async function register(req, res, next) {
     user.refreshTokens.push({ tokenHash: sha256(refreshToken), expiresAt: new Date(Date.now() + Number(process.env.JWT_REFRESH_TTL_SEC || 2_592_000) * 1000) });
     await user.save();
 
-    res.status(201).json({ ok: true, user: { id: user._id.toString(), email: user.email, name: user.name, role: user.role }, accessToken, refreshToken });
+    res.status(201).json({ ok: true, user: { id: user._id.toString(), email: user.email, name: user.name, role: user.role, isPremium: user.isPremium, testsAttempted: user.testsAttempted }, accessToken, refreshToken });
   } catch (e) {
     next(e);
   }
@@ -100,7 +100,7 @@ export async function login(req, res, next) {
     const body = z.object({ email: z.string().email(), password: z.string().min(1) }).parse(req.body);
     const email = body.email.toLowerCase();
 
-    const user = await User.findOne({ email }).select("+passwordHash email name role banned refreshTokens failedLoginCount lockUntil parentOf childOf");
+    const user = await User.findOne({ email }).select("+passwordHash email name role banned refreshTokens failedLoginCount lockUntil parentOf childOf isPremium testsAttempted");
     if (!user) throw unauthorized("Invalid credentials");
     if (user.banned) throw forbidden("Account disabled", "BANNED");
     if (isLocked(user)) throw forbidden("Account locked. Try later.", "ACCOUNT_LOCKED");
@@ -126,7 +126,7 @@ export async function login(req, res, next) {
     if (user.refreshTokens.length > 10) user.refreshTokens = user.refreshTokens.slice(-10);
     await user.save();
 
-    res.json({ ok: true, user: { id: user._id.toString(), email: user.email, name: user.name, role: user.role }, accessToken, refreshToken });
+    res.json({ ok: true, user: { id: user._id.toString(), email: user.email, name: user.name, role: user.role, isPremium: user.isPremium, testsAttempted: user.testsAttempted }, accessToken, refreshToken });
   } catch (e) {
     next(e);
   }

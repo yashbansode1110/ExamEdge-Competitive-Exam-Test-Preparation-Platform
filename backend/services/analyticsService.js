@@ -28,15 +28,18 @@ function toLineSeries(points, label, color = "rgb(99, 102, 241)") {
 
 export async function buildStudentAnalytics(studentId, { attemptsLimit = 30 } = {}) {
   if (!mongoose.isValidObjectId(studentId)) throw badRequest("Invalid student id", "INVALID_ID");
+  const sId = new mongoose.Types.ObjectId(studentId);
 
   const attempts = await TestAttempt.find({
-    userId: studentId,
+    userId: sId,
     status: { $in: ["submitted", "timeout", "expired", "in_progress"] }
   })
-    .select("exam status startedAt finalizedAt submittedAt score accuracy breakdown answers questionIds")
+    .select("exam status startedAt finalizedAt submittedAt score accuracy breakdown answers questionIds correctCount totalMarks")
     .sort({ startedAt: -1 })
     .limit(attemptsLimit)
     .lean();
+
+  console.log("Attempts found for user", studentId, ":", attempts.length);
 
   if (!attempts.length) {
     return {
@@ -69,13 +72,24 @@ export async function buildStudentAnalytics(studentId, { attemptsLimit = 30 } = 
   const subjectAgg = new Map();
   let needComputeAttempts = [];
   for (const a of attempts) {
-    const bySubject = a.breakdown?.bySubject;
-    if (bySubject && typeof bySubject === "object") {
-      for (const [subject, s] of Object.entries(bySubject)) {
-        const cur = subjectAgg.get(subject) || { correct: 0, attempted: 0 };
-        cur.correct += Number(s.correct || 0);
-        cur.attempted += Number(s.attempted || 0);
-        subjectAgg.set(subject, cur);
+    const bySubject = a.breakdown?.bySubject || a.breakdown?.bySection;
+    if (bySubject) {
+      if (Array.isArray(bySubject)) {
+        for (const s of bySubject) {
+          const name = s.sectionName || s.subject;
+          if (!name) continue;
+          const cur = subjectAgg.get(name) || { correct: 0, attempted: 0 };
+          cur.correct += Number(s.correct || 0);
+          cur.attempted += Number(s.total || s.attempted || 0);
+          subjectAgg.set(name, cur);
+        }
+      } else if (typeof bySubject === "object") {
+        for (const [subject, s] of Object.entries(bySubject)) {
+          const cur = subjectAgg.get(subject) || { correct: 0, attempted: 0 };
+          cur.correct += Number(s.correct || 0);
+          cur.attempted += Number(s.attempted || s.total || 0);
+          subjectAgg.set(subject, cur);
+        }
       }
     } else {
       if (needComputeAttempts.length < 10) needComputeAttempts.push(a);
@@ -143,7 +157,7 @@ export async function buildStudentAnalytics(studentId, { attemptsLimit = 30 } = 
 
   const topicItems = [...topicAgg.values()];
   topicItems.sort((a, b) => safePct(a.correct, a.attempted) - safePct(b.correct, b.attempted));
-  const topWeak = topicItems.filter((x) => x.attempted >= 3).slice(0, 10);
+  const topWeak = topicItems.filter((x) => x.attempted >= 3 && safePct(x.correct, x.attempted) < 0.5).slice(0, 10);
   const topicAccuracy = {
     labels: topWeak.map((x) => `${x.meta.subject} • ${x.meta.topic}`),
     datasets: [
@@ -162,9 +176,33 @@ export async function buildStudentAnalytics(studentId, { attemptsLimit = 30 } = 
     subject: x.meta.subject,
     chapter: x.meta.chapter,
     topic: x.meta.topic,
-    accuracy: safePct(x.correct, x.attempted),
+    accuracy: safePct(x.correct, x.attempted) * 100, // convert to percentage
     attempts: x.attempted
   }));
+
+  // Strong topics (accuracy >= 70%)
+  const topStrong = topicItems.filter((x) => x.attempted >= 3 && safePct(x.correct, x.attempted) >= 0.7).sort((a,b) => safePct(b.correct, b.attempted) - safePct(a.correct, a.attempted)).slice(0, 10);
+  const strongTopics = topStrong.map((x) => ({
+    topic: x.meta.topic,
+    subject: x.meta.subject,
+    accuracy: safePct(x.correct, x.attempted) * 100,
+    attempts: x.attempted
+  }));
+
+  let totalScore = 0;
+  let totalCorrect = 0;
+  let totalQuestionsA = 0;
+  for (const a of attempts) {
+     totalScore += Number(a.score || 0);
+     totalCorrect += Number(a.correctCount || 0);
+     totalQuestionsA += Number((a.questionIds || []).length);
+  }
+  const overallAccuracy = totalQuestionsA > 0 ? (totalCorrect / totalQuestionsA) * 100 : 0;
+  
+  const subjectAccuracyMap = {};
+  for (const s of subjectLabels) {
+    subjectAccuracyMap[s] = Math.round(safePct(subjectAgg.get(s).correct, subjectAgg.get(s).attempted) * 100);
+  }
 
   return {
     ok: true,
@@ -175,7 +213,11 @@ export async function buildStudentAnalytics(studentId, { attemptsLimit = 30 } = 
       topicAccuracy,
       timePerQuestion: toLineSeries(timePoints, "Avg time per question (sec)", "rgb(16, 185, 129)")
     },
-    weakTopics
+    weakTopics,
+    strongTopics,
+    score: totalScore,
+    accuracy: overallAccuracy,
+    subjectAccuracyMap
   };
 }
 

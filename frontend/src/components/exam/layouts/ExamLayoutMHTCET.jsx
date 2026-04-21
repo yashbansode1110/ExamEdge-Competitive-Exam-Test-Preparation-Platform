@@ -15,6 +15,7 @@ export function ExamLayoutMHTCET({
   secondsLeft,
   subjectTimers = {},
   subjects = [],
+  activeSection = null,
   activeSubject = "physics",
   onSwitchSubject,
   sectionStatus,
@@ -26,6 +27,7 @@ export function ExamLayoutMHTCET({
   onAnswer,
   onPrevious,
   onNext,
+  onSaveAndNext,
   canGoBack,
   canGoNext,
   onSubmit,
@@ -46,6 +48,9 @@ export function ExamLayoutMHTCET({
     const ss = String(sec % 60).padStart(2, "0");
     return `${mm}:${ss}`;
   }
+
+  const isPcmCombinedMode = !!sectionStatus?.pc;
+  const isSingleSubject = subjects.length === 1;
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -85,11 +90,79 @@ export function ExamLayoutMHTCET({
             </div>
           ) : null}
           <div className="w-full max-w-[700px]">
-          {subjects.length ? (
+          {isPcmCombinedMode ? (
+            <div className="mb-3 rounded-md border border-secondary-200 bg-white p-3 space-y-3">
+              {!isSingleSubject && (
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onSwitchSubject?.("physics")}
+                      disabled={activeSection !== "pc" || sectionStatus?.pc === "completed"}
+                      className={`px-3 py-1.5 rounded-md border text-xs font-semibold ${
+                        activeSection === "pc" && activeSubject === "physics"
+                          ? "border-primary-500 bg-primary-50 text-primary-700"
+                          : "border-secondary-200 bg-white text-secondary-700"
+                      }`}
+                    >
+                      Physics
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onSwitchSubject?.("chemistry")}
+                      disabled={activeSection !== "pc" || sectionStatus?.pc === "completed"}
+                      className={`px-3 py-1.5 rounded-md border text-xs font-semibold ${
+                        activeSection === "pc" && activeSubject === "chemistry"
+                          ? "border-primary-500 bg-primary-50 text-primary-700"
+                          : "border-secondary-200 bg-white text-secondary-700"
+                      }`}
+                    >
+                      Chemistry
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => onSwitchSubject?.("mathematics")}
+                    disabled={sectionStatus?.mathematics === "locked" || sectionStatus?.pc !== "completed"}
+                    className={`px-3 py-1.5 rounded-md border text-xs font-semibold ${
+                      activeSection === "mathematics"
+                        ? "border-primary-500 bg-primary-50 text-primary-700"
+                        : sectionStatus?.mathematics === "locked"
+                          ? "border-secondary-200 bg-secondary-50 text-secondary-500 cursor-not-allowed"
+                          : "border-secondary-200 bg-white text-secondary-700"
+                    }`}
+                  >
+                    Mathematics
+                  </button>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                {isSingleSubject ? (
+                  <div className="rounded-md border border-secondary-200 bg-secondary-50 px-3 py-2 text-secondary-800">
+                    <div className="font-semibold">Time Left</div>
+                    <div className="mt-0.5 font-mono">{formatSeconds(secondsLeft)}</div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="rounded-md border border-secondary-200 bg-secondary-50 px-3 py-2 text-secondary-800">
+                      <div className="font-semibold">Physics + Chemistry Time Left</div>
+                      <div className="mt-0.5 font-mono">{formatSeconds(subjectTimers.pc)}</div>
+                    </div>
+                    <div className="rounded-md border border-secondary-200 bg-secondary-50 px-3 py-2 text-secondary-800">
+                      <div className="font-semibold">Mathematics Time Left</div>
+                      <div className="mt-0.5 font-mono">{formatSeconds(subjectTimers.mathematics)}</div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          ) : subjects.length ? (
             <div className="mb-3 rounded-md border border-secondary-200 bg-white p-3">
               <div className="text-xs font-semibold text-secondary-700 mb-2">Subject-wise timers</div>
               <div className="flex flex-wrap gap-2">
-                {subjects.map((s) => (
+                {!isSingleSubject && subjects.map((s) => (
                   <button
                     key={s}
                     type="button"
@@ -104,24 +177,14 @@ export function ExamLayoutMHTCET({
                             : "border-secondary-200 bg-white text-secondary-700"
                     }`}
                   >
-                    {s.toUpperCase()} • {formatSeconds(subjectTimers[s])}
-                    {sectionStatus?.[s] ? (
-                      <span
-                        className={`ml-2 inline-block rounded px-1.5 py-0.5 text-[10px] font-bold ${
-                          sectionStatus[s] === "completed"
-                            ? "bg-success-100 text-success-700"
-                            : sectionStatus[s] === "in-progress"
-                              ? "bg-primary-100 text-primary-700"
-                              : sectionStatus[s] === "locked"
-                                ? "bg-secondary-100 text-secondary-600"
-                                : "bg-secondary-100 text-secondary-700"
-                        }`}
-                      >
-                        {sectionStatus[s]}
-                      </span>
-                    ) : null}
+                    {String(s).toUpperCase()} • {formatSeconds(subjectTimers[s])}
                   </button>
                 ))}
+                {isSingleSubject && (
+                  <div className="px-3 py-1.5 rounded-md border border-secondary-200 bg-white text-xs font-semibold text-secondary-700">
+                    Time Left: {formatSeconds(secondsLeft)}
+                  </div>
+                )}
               </div>
             </div>
           ) : null}
@@ -170,7 +233,8 @@ export function ExamLayoutMHTCET({
         canGoNext={canGoNext}
         onPrevious={onPrevious}
         onNext={onNext}
-        showNextSection={showNextSection}
+        onSaveAndNext={onSaveAndNext}
+        showNextSection={!isSingleSubject && showNextSection}
         onNextSection={onNextSection}
         nextSectionLabel={nextSectionLabel}
         onToggleReview={onToggleReview}

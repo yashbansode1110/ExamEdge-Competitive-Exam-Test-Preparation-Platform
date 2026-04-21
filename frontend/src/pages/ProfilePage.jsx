@@ -71,27 +71,27 @@ export function ProfilePage() {
           {loading ? (
             <div className="text-secondary-600">Loading sessions...</div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto text-secondary-900">
               <table className="w-full text-sm">
-                <thead>
+                <thead className="text-secondary-600">
                   <tr className="border-b border-secondary-200 text-left">
-                    <th className="py-2 pr-3">Test Name</th>
-                    <th className="py-2 pr-3">Score</th>
-                    <th className="py-2 pr-3">Total Marks</th>
-                    <th className="py-2 pr-3">Accuracy %</th>
-                    <th className="py-2 pr-3">Time Taken</th>
-                    <th className="py-2 pr-3">Date</th>
+                    <th className="py-2 pr-3 font-semibold">Test Name</th>
+                    <th className="py-2 pr-3 font-semibold">Score</th>
+                    <th className="py-2 pr-3 font-semibold">Total Marks</th>
+                    <th className="py-2 pr-3 font-semibold">Accuracy %</th>
+                    <th className="py-2 pr-3 font-semibold">Time Taken</th>
+                    <th className="py-2 pr-3 font-semibold">Date</th>
                   </tr>
                 </thead>
                 <tbody>
                   {items.map((row) => (
-                    <tr key={row.id} className="border-b border-secondary-100">
+                    <tr key={row.id} className="border-b border-secondary-100 hover:bg-secondary-50">
                       <td className="py-2 pr-3">{row.testName}</td>
-                      <td className="py-2 pr-3">{row.score}</td>
-                      <td className="py-2 pr-3">{row.totalMarks}</td>
-                      <td className="py-2 pr-3">{Number(row.accuracy || 0).toFixed(2)}%</td>
-                      <td className="py-2 pr-3">{Math.round(Number(row.timeUsed || 0) / 60000)} min</td>
-                      <td className="py-2 pr-3">{new Date(row.date).toLocaleString()}</td>
+                      <td className="py-2 pr-3 font-medium">{row.score}</td>
+                      <td className="py-2 pr-3 text-secondary-600">{row.totalMarks}</td>
+                      <td className="py-2 pr-3 text-secondary-600">{Number(row.accuracy || 0).toFixed(2)}%</td>
+                      <td className="py-2 pr-3 text-secondary-600">{Math.round(Number(row.timeUsed || 0) / 60000)} min</td>
+                      <td className="py-2 pr-3 text-secondary-500">{new Date(row.date).toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>

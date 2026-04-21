@@ -8,6 +8,7 @@ import { ExamLayoutMHTCET } from "../components/exam/layouts/ExamLayoutMHTCET.js
 import { ExamSecurityLayer } from "../components/exam/ExamSecurityLayer.jsx";
 import { useExamSecurity } from "../utils/useExamSecurity.js";
 import { Modal } from "../components/ui/Modal.jsx";
+import { CheatingWarningModal } from "../components/exam/CheatingWarningModal.jsx";
 
 export function ExamInterfacePageUI() {
   const { testId: testSessionId } = useParams();
@@ -25,26 +26,46 @@ export function ExamInterfacePageUI() {
   const [revision, setRevision] = useState(0);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const [showSectionSubmitModal, setShowSectionSubmitModal] = useState(false);
-  const [completedSections, setCompletedSections] = useState([]);
   const [subjectTimers, setSubjectTimers] = useState({ physics: 0, chemistry: 0, math: 0, biology: 0 });
-  const [activeSubject, setActiveSubject] = useState("physics");
-  const isMht = test?.exam?.includes("MHT");
+  const [activeSubject, setActiveSubject] = useState("physics"); // physics | chemistry | math
+  const isFiltered = test?.isFiltered === true || test?.type === "filtered";
+  const isMht = !isFiltered && test?.exam?.includes("MHT");
+  const isSingleSubject = isFiltered || test?.subjects?.length === 1 || (questions.length > 0 && new Set(questions.map(q => String(q.subject || "").toLowerCase())).size === 1);
+  const isMhtPcm = isMht && String(test?.exam || "").toUpperCase().includes("PCM") && !isSingleSubject;
   const [sectionStatus, setSectionStatus] = useState({
+    pc: "not-started",
     physics: "not-started",
     chemistry: "not-started",
     mathematics: "locked",
     biology: "locked"
   });
   const [sectionTimers, setSectionTimers] = useState({
+    pc: 5400,
     physics: 2700,
     chemistry: 2700,
     mathematics: 5400,
     biology: 5400
   });
-  const [activeSection, setActiveSection] = useState(null); // null | physics | chemistry | mathematics | biology
+  const [activeSection, setActiveSection] = useState(null); // null | pc | mathematics
   const [showStartSectionModal, setShowStartSectionModal] = useState(false);
-  const [pendingSectionSwitch, setPendingSectionSwitch] = useState(null);
+  const [warning, setWarning] = useState({ show: false, type: "" });
+  const MAX_WARNINGS = 3;
+  const [warningCount, setWarningCount] = useState(0);
+  const warningCountRef = useRef(0);
+
+  useEffect(() => {
+    warningCountRef.current = warningCount;
+  }, [warningCount]);
+
   const showError = useCallback((message) => setError(message), []);
+  const sectionSubmitInFlightRef = useRef(false);
+  const isSubmittingRef = useRef(false);
+
+  useEffect(() => {
+    return () => {
+      window.__EXAM_SUBMITTING__ = false;
+    };
+  }, []);
 
   const activeQStartedAtRef = useRef(Date.now());
   const lastIndexRef = useRef(0);
@@ -107,16 +128,6 @@ export function ExamInterfacePageUI() {
     activeSectionRef.current = activeSection;
   }, [activeSection]);
 
-  // STEP 1: Debug logs (MHT-CET)
-  useEffect(() => {
-    // eslint-disable-next-line no-console
-    console.log("ACTIVE SECTION:", activeSection);
-    // eslint-disable-next-line no-console
-    console.log("TIMERS:", sectionTimers);
-    // eslint-disable-next-line no-console
-    console.log("STATUS:", sectionStatus);
-  }, [activeSection, sectionTimers, sectionStatus]);
-
   function subjectKeyFromQuestion(q) {
     const s = String(q?.subject || "").toLowerCase();
     if (s.includes("physics")) return "physics";
@@ -129,10 +140,12 @@ export function ExamInterfacePageUI() {
   function mhtSectionKeyFromQuestion(q) {
     const key = subjectKeyFromQuestion(q);
     if (key === "math") return "mathematics";
+    if (key === "physics" || key === "chemistry") return "pc";
     return key;
   }
 
   function displaySubjectNameFromKey(key) {
+    if (key === "pc") return "Physics + Chemistry";
     if (key === "physics") return "Physics";
     if (key === "chemistry") return "Chemistry";
     if (key === "math") return "Mathematics";
@@ -140,16 +153,66 @@ export function ExamInterfacePageUI() {
     return "Physics";
   }
 
+  const handleCheatEvent = useCallback((event) => {
+    if (isSubmittingRef.current) return;
+
+    const kind = event?.kind || event?.type || "";
+    // Only track specific events
+    if (kind !== "FULLSCREEN_EXIT" && kind !== "RIGHT_CLICK_BLOCKED" && kind !== "fullscreen_exit" && kind !== "right_click") return;
+
+    const newCount = warningCountRef.current + 1;
+    setWarningCount(newCount);
+
+    if (newCount >= MAX_WARNINGS) {
+      alert("Maximum warnings reached. Submitting test automatically.");
+      if (!submittedRef.current) {
+        submittedRef.current = true;
+        // The onSubmit logic handles submission
+        const submitFn = async () => {
+          try {
+            await apiFetch(`/api/test-sessions/${testSessionId}/submit`, {
+              method: "POST",
+              token: accessToken,
+              body: {
+                sessionId: examClientSessionId,
+                submitIdempotencyKey: `submit_${Date.now()}_${Math.random().toString(16).slice(2)}`,
+                responses: [], // Let backend figure out what's saved
+                timeUsed: 0,
+                timeLeft: 0
+              },
+            });
+            nav(`/result/${attempt?.id}`);
+          } catch(e) {}
+        };
+        submitFn();
+      }
+    } else {
+      alert(`Warning ${newCount}/${MAX_WARNINGS}: Do not exit fullscreen or right-click.`);
+    }
+  }, [accessToken, attempt?.id, examClientSessionId, testSessionId, nav]);
+
   useExamSecurity({
     channelKey: `examedge_guard_${testSessionId}`,
     sessionId: examClientSessionId,
-    onCheat: (evt) => cheatQueueRef.current.push(evt),
+    isSubmittingRef,
+    onCheat: (evt) => {
+      cheatQueueRef.current.push(evt);
+      setWarning({ show: true, type: evt.kind });
+      handleCheatEvent(evt);
+    },
     onNetwork: (evt) => networkQueueRef.current.push(evt),
   });
 
   useEffect(() => {
-    if (!accessToken) nav("/login");
-  }, [accessToken, nav]);
+    if (!accessToken) {
+      nav("/login");
+      return;
+    }
+    const agreed = sessionStorage.getItem(`instructions_agreed_${testSessionId}`);
+    if (!agreed) {
+      nav(`/instructions/${testSessionId}`);
+    }
+  }, [accessToken, nav, testSessionId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -174,35 +237,26 @@ export function ExamInterfacePageUI() {
         }
         setRevision(data.attempt.revision || 0);
         setSubjectTimers(data.testSession?.subjectTimers || { physics: 0, chemistry: 0, math: 0, biology: 0 });
-        if (data.test?.exam?.includes("MHT")) {
-          // STEP 2: Timer init must never start at 0.
-          const defaultTimers = { physics: 2700, chemistry: 2700, mathematics: 5400, biology: 5400 };
+        if (data.test?.exam?.includes("MHT") && String(data.test?.exam || "").toUpperCase().includes("PCM")) {
+          const defaultTimers = { pc: 5400, mathematics: 5400 };
           const rawTimers = data.testSession?.sectionTimers || {};
           const safeTimers = {
-            physics: Math.max(0, Number.isFinite(Number(rawTimers.physics)) ? Number(rawTimers.physics) : defaultTimers.physics),
-            chemistry: Math.max(0, Number.isFinite(Number(rawTimers.chemistry)) ? Number(rawTimers.chemistry) : defaultTimers.chemistry),
+            pc: Math.max(0, Number.isFinite(Number(rawTimers.pc)) ? Number(rawTimers.pc) : defaultTimers.pc),
             mathematics: Math.max(
               0,
               Number.isFinite(Number(rawTimers.mathematics)) ? Number(rawTimers.mathematics) : defaultTimers.mathematics
-            ),
-            biology: Math.max(0, Number.isFinite(Number(rawTimers.biology)) ? Number(rawTimers.biology) : defaultTimers.biology)
+            )
           };
-          // If backend/session had zeros (buggy legacy sessions), fall back to defaults.
           setSectionTimers({
-            physics: safeTimers.physics > 0 ? safeTimers.physics : defaultTimers.physics,
-            chemistry: safeTimers.chemistry > 0 ? safeTimers.chemistry : defaultTimers.chemistry,
-            mathematics: safeTimers.mathematics > 0 ? safeTimers.mathematics : defaultTimers.mathematics,
-            biology: safeTimers.biology > 0 ? safeTimers.biology : defaultTimers.biology
+            pc: safeTimers.pc > 0 ? safeTimers.pc : defaultTimers.pc,
+            mathematics: safeTimers.mathematics > 0 ? safeTimers.mathematics : defaultTimers.mathematics
           });
 
-          // STEP 3: Strict default locking
-          const defaultStatus = { physics: "not-started", chemistry: "not-started", mathematics: "locked", biology: "locked" };
+          const defaultStatus = { pc: "not-started", mathematics: "locked" };
           const rawStatus = data.testSession?.sectionStatus || {};
           setSectionStatus({
-            physics: rawStatus.physics || defaultStatus.physics,
-            chemistry: rawStatus.chemistry || defaultStatus.chemistry,
-            mathematics: rawStatus.mathematics || defaultStatus.mathematics,
-            biology: rawStatus.biology || defaultStatus.biology
+            pc: rawStatus.pc || defaultStatus.pc,
+            mathematics: rawStatus.mathematics || defaultStatus.mathematics
           });
 
           setActiveSection(data.testSession?.activeSection ? data.testSession.activeSection : null);
@@ -243,16 +297,15 @@ export function ExamInterfacePageUI() {
             if (parsed?.subjectTimers) setSubjectTimers(parsed.subjectTimers);
             if (parsed?.sectionStatus) setSectionStatus(parsed.sectionStatus);
             if (parsed?.sectionTimers) {
-              const dt = { physics: 2700, chemistry: 2700, mathematics: 5400, biology: 5400 };
+              const dt = { pc: 5400, mathematics: 5400 };
               const t = parsed.sectionTimers || {};
               setSectionTimers({
-                physics: Math.max(0, Number(t.physics || 0)) || dt.physics,
-                chemistry: Math.max(0, Number(t.chemistry || 0)) || dt.chemistry,
+                pc: Math.max(0, Number(t.pc || 0)) || dt.pc,
                 mathematics: Math.max(0, Number(t.mathematics || 0)) || dt.mathematics,
-                biology: Math.max(0, Number(t.biology || 0)) || dt.biology
               });
             }
             if (parsed?.activeSection) setActiveSection(parsed.activeSection);
+            if (parsed?.activeSubject) setActiveSubject(parsed.activeSubject);
           }
         } catch {
           // ignore backup parsing errors
@@ -421,10 +474,11 @@ export function ExamInterfacePageUI() {
       subjectTimers,
       sectionStatus,
       sectionTimers,
-      activeSection
+      activeSection,
+      activeSubject
     };
     localStorage.setItem(localBackupKey, JSON.stringify(backup));
-  }, [answers, visitedQuestions, subjectTimers, sectionStatus, sectionTimers, activeSection, attempt?.id, localBackupKey]);
+  }, [answers, visitedQuestions, subjectTimers, sectionStatus, sectionTimers, activeSection, activeSubject, attempt?.id, localBackupKey]);
 
   useEffect(() => {
     const currentAttempt = attempt?.id ? attempt : null;
@@ -451,7 +505,7 @@ export function ExamInterfacePageUI() {
           token: accessToken,
           body: {
             subjectTimers: subjectTimersRef.current,
-            ...(isMht
+            ...(isMht && isMhtPcm
               ? {
                   sectionTimers: sectionTimersRef.current,
                   sectionStatus: sectionStatusRef.current,
@@ -465,7 +519,7 @@ export function ExamInterfacePageUI() {
       }
     }, 10000);
     return () => clearInterval(id);
-  }, [attempt?.id, accessToken, testSessionId, isMht]);
+  }, [attempt?.id, accessToken, testSessionId, isMht, isMhtPcm]);
 
   const onSubmit = useCallback(async () => {
     if (!accessToken) return;
@@ -475,6 +529,9 @@ export function ExamInterfacePageUI() {
     }
     const currentAttempt = attemptRef.current;
     if (!currentAttempt?.id) return;
+
+    window.__EXAM_SUBMITTING__ = true;
+    isSubmittingRef.current = true;
 
     try {
       try {
@@ -538,7 +595,7 @@ export function ExamInterfacePageUI() {
   const currentQuestion = questions[currentIndex];
   const currentAnswer = currentQuestion ? answers.get(String(currentQuestion._id)) || {} : {};
 
-  const sections = test?.sections || [];
+  const sections = isFiltered ? [] : (test?.sections || []);
   const activeSectionId = attempt?.currentSectionId || sections[0]?.sectionId || "";
 
   const sectionQuestionIndexes = useMemo(() => {
@@ -652,13 +709,12 @@ export function ExamInterfacePageUI() {
     const set = new Set();
     for (const q of questions) set.add(mhtSectionKeyFromQuestion(q));
     const list = [...set];
-    const order = ["physics", "chemistry", "mathematics", "biology"];
-    list.sort((a, b) => order.indexOf(a) - order.indexOf(b));
-    return list;
+    const order = ["pc", "mathematics"];
+    return list.filter((k) => k === "pc" || k === "mathematics").sort((a, b) => order.indexOf(a) - order.indexOf(b));
   }, [questions]);
 
   const questionIndexesByMhtSection = useMemo(() => {
-    const out = { physics: [], chemistry: [], mathematics: [], biology: [] };
+    const out = { pc: [], mathematics: [] };
     questions.forEach((q, idx) => {
       const k = mhtSectionKeyFromQuestion(q);
       if (!out[k]) out[k] = [];
@@ -667,7 +723,15 @@ export function ExamInterfacePageUI() {
     return out;
   }, [questions]);
 
-  const activeMhtIndexes = questionIndexesByMhtSection[activeSection || ""] || [];
+  const activeMhtIndexes = useMemo(() => {
+    if (!isMhtPcm) return sectionQuestionIndexes; // Use standard linear indexes for non-PCM
+    if (activeSection === "pc") {
+      if (activeSubject === "chemistry") return subjectQuestionIndexesMap.chemistry || [];
+      return subjectQuestionIndexesMap.physics || [];
+    }
+    if (activeSection === "mathematics") return subjectQuestionIndexesMap.math || [];
+    return [];
+  }, [isMhtPcm, activeSection, activeSubject, sectionQuestionIndexes, subjectQuestionIndexesMap]);
   const mhtCurrentPos = activeMhtIndexes.indexOf(currentIndex);
   const mhtCanGoBack = mhtCurrentPos > 0;
   const mhtCanGoNext = mhtCurrentPos >= 0 && mhtCurrentPos < activeMhtIndexes.length - 1;
@@ -677,158 +741,128 @@ export function ExamInterfacePageUI() {
     if (typeof prevIdx === "number") goToQuestion(prevIdx);
   }, [mhtCanGoBack, activeMhtIndexes, mhtCurrentPos, goToQuestion]);
 
-  const isSectionCompleted = useCallback(
-    (sectionKey) => {
-      if (!sectionKey) return false;
-      const idxs = questionIndexesByMhtSection[sectionKey] || [];
-      return idxs.every((idx) => {
-        const q = questions[idx];
-        if (!q) return true;
-        // The prompt asked for: questions.every(q => answers[q.id] !== undefined);
-        const ans = answers.get(String(q._id));
-        const visited = visitedQuestions.has(String(q._id));
-        return ans !== undefined || visited;
-      });
-    },
-    [questionIndexesByMhtSection, questions, answers, visitedQuestions]
-  );
-
   const mhtOnNext = useCallback(() => {
-    if (!mhtCanGoNext) {
-      if (isSectionCompleted(activeSection)) {
-        console.log(`[DEBUG GUARD] Section completed, modal opens for section: ${activeSection}`);
-        setShowSectionSubmitModal(true);
-      }
-      return;
-    }
+    if (!mhtCanGoNext) return;
     const nextIdx = activeMhtIndexes[mhtCurrentPos + 1];
     if (typeof nextIdx === "number") goToQuestion(nextIdx);
-  }, [mhtCanGoNext, activeMhtIndexes, mhtCurrentPos, goToQuestion, isSectionCompleted, activeSection]);
-  const mhtOrderedSubjects = useMemo(() => {
-    const order = ["physics", "chemistry", "mathematics", "biology"];
-    return order.filter((s) => mhtSubjects.includes(s));
-  }, [mhtSubjects]);
-  const mhtNextSubject = useMemo(() => {
-    if (!activeSection) return null;
-    if (activeSection === "physics") {
-      return sectionStatus.chemistry === "locked" ? "chemistry" : (mhtOrderedSubjects.includes("mathematics") && sectionStatus.mathematics !== "completed" ? "mathematics" : null);
-    }
-    if (activeSection === "chemistry") {
-      return sectionStatus.physics === "locked" ? "physics" : (mhtOrderedSubjects.includes("mathematics") && sectionStatus.mathematics !== "completed" ? "mathematics" : null);
-    }
-    if (sectionStatus.physics === "completed" && sectionStatus.chemistry === "completed") {
-      if (mhtOrderedSubjects.includes("mathematics") && sectionStatus.mathematics !== "completed") return "mathematics";
-      if (mhtOrderedSubjects.includes("biology") && sectionStatus.biology !== "completed") return "biology";
-    }
-    return null;
-  }, [activeSection, mhtOrderedSubjects, sectionStatus]);
-  const onNextMhtSubject = useCallback(() => {
-    if (isSectionCompleted(activeSection)) {
-      setShowSectionSubmitModal(true);
+  }, [mhtCanGoNext, activeMhtIndexes, mhtCurrentPos, goToQuestion]);
+
+  const onSaveAndNext = useCallback(() => {
+    const q = questionsRef.current[currentIndex];
+    if (!q) return;
+
+    const qid = String(q._id);
+
+    // Save visited
+    setVisitedQuestions((prev) => {
+      const next = new Set(prev);
+      next.add(qid);
+      return next;
+    });
+
+    // Move next
+    console.log("Index:", currentIndex);
+    console.log("Questions:", questions.length);
+    if (isMht && isMhtPcm) {
+      if (mhtCanGoNext) {
+        mhtOnNext();
+      }
     } else {
-      showError("Complete current section first");
+      if (canGoNext) {
+        onNext();
+      }
     }
-  }, [activeSection, isSectionCompleted]);
+  }, [currentIndex, questions.length, isMht, isMhtPcm, mhtCanGoNext, mhtOnNext, canGoNext, onNext]);
 
-
-
-  const mhtActivateSection = useCallback(
-    (nextSection) => {
-      setActiveSection(nextSection);
-      setActiveSubject(nextSection === "mathematics" ? "math" : nextSection);
-      setSectionStatus((prev) => ({ ...prev, [nextSection]: "in-progress" }));
-      const idx = (questionIndexesByMhtSection[nextSection] || [])[0];
-      if (typeof idx === "number") goToQuestion(idx);
-      setAttempt((a) => {
-        if (!a || !test?.sections?.length) return a;
-        const targetName = nextSection === "mathematics" ? "math" : nextSection;
-        const sec = test.sections.find((s) =>
-          (s.subjects || []).some((subj) => String(subj || "").toLowerCase().includes(targetName))
-        );
-        if (!sec?.sectionId) return a;
-        const next = { ...a, currentSectionId: sec.sectionId };
-        attemptRef.current = next;
-        return next;
-      });
+  const submitPcSection = useCallback(
+    async ({ reason } = { reason: "manual" }) => {
+      if (sectionSubmitInFlightRef.current) return;
+      sectionSubmitInFlightRef.current = true;
+      try {
+        setSectionStatus((prev) => ({
+          ...prev,
+          pc: "completed",
+          mathematics: prev.mathematics === "locked" ? "not-started" : prev.mathematics
+        }));
+        setActiveSection("mathematics");
+        setActiveSubject("math");
+        const idx = (subjectQuestionIndexesMap.math || [])[0];
+        if (typeof idx === "number") goToQuestion(idx);
+        await autosave({ reason: reason === "time_over" ? "pc_time_over" : "pc_submit" });
+      } finally {
+        sectionSubmitInFlightRef.current = false;
+      }
     },
-    [goToQuestion, questionIndexesByMhtSection, test?.sections]
+    [autosave, goToQuestion, subjectQuestionIndexesMap]
   );
 
-  // STEP 4: Replace section switching logic (strict MHT-CET flow)
   function handleSectionSwitch(target) {
+    if (!isMhtPcm) return;
     if (!target) return;
 
-    // Force first selection
-    if (!activeSection) {
-      if (target !== "physics" && target !== "chemistry") {
+    // Mathematics tab click
+    if (target === "mathematics") {
+      const status = sectionStatusRef.current || sectionStatus;
+      if (status.pc !== "completed") {
         showError("Section not available yet");
         return;
       }
-      setActiveSection(target);
-      setSectionStatus((prev) => ({ ...prev, [target]: "in-progress" }));
-      const idx = (questionIndexesByMhtSection[target] || [])[0];
+      if (status.pc === "completed" && status.mathematics === "not-started") {
+        setSectionStatus((prev) => ({ ...prev, mathematics: "in-progress" }));
+      }
+      setActiveSection("mathematics");
+      setActiveSubject("math");
+      const idx = (subjectQuestionIndexesMap.math || [])[0];
       if (typeof idx === "number") goToQuestion(idx);
       return;
     }
 
-    const active = activeSection;
-    if (target === active) return;
-    if (sectionStatus[target] === "locked") {
-      showError("Section not available yet");
-      return;
+    // Physics/Chemistry toggle inside PC section
+    if (target === "physics" || target === "chemistry") {
+      const status = sectionStatusRef.current || sectionStatus;
+      if (status.pc === "completed") {
+        showError("Cannot revisit completed section");
+        return;
+      }
+      if (activeSectionRef.current !== "pc") {
+        showError("Cannot revisit completed section");
+        return;
+      }
+      setActiveSubject(target);
+      const idx = (subjectQuestionIndexesMap[target] || [])[0];
+      if (typeof idx === "number") goToQuestion(idx);
     }
-    if (sectionStatus[target] === "completed") {
-      showError("Cannot revisit completed section");
-      return;
-    }
-
-    const isCompleted = isSectionCompleted(active);
-
-    // FIRST update status snapshot before validation branch
-    let updatedStatus = {
-      ...(sectionStatusRef.current || sectionStatus),
-      [active]: isCompleted ? "completed" : "in-progress"
-    };
-    setSectionStatus(updatedStatus);
-
-    // THEN validate
-    if (!isCompleted) {
-      showError("Complete current section first");
-      return;
-    }
-
-    // Unlock logic AFTER update
-    if (updatedStatus.physics === "completed" && updatedStatus.chemistry === "completed") {
-      updatedStatus.mathematics = "not-started";
-      updatedStatus.biology = "not-started";
-    }
-
-    // Block locked target (after unlock computation)
-    if (updatedStatus[target] === "locked") {
-      showError("Section not available yet");
-      return;
-    }
-
-    let finalUpdated = { ...updatedStatus };
-    finalUpdated[target] = finalUpdated[target] === "completed" ? "completed" : "in-progress";
-
-    setPendingSectionSwitch({
-      active,
-      target,
-      updatedStatus: finalUpdated
-    });
   }
 
   useEffect(() => {
-    if (!isMht) return;
+    if (!isMhtPcm) return;
+    if (isSingleSubject) return;
     if (!attempt?.id || !questions.length) return;
     if (activeSectionRef.current) return;
+    const status = sectionStatusRef.current || sectionStatus;
+    if (status?.pc !== "not-started") return;
     setShowStartSectionModal(true);
-  }, [isMht, attempt?.id, questions.length]);
+  }, [isMhtPcm, isSingleSubject, attempt?.id, questions.length, sectionStatus]);
 
-  // STEP 2: Exact timer tick logic
+  // Restore active section on refresh/resume (when backend/local backup has status but activeSection is empty).
   useEffect(() => {
-    if (!isMht) return;
+    if (!isMhtPcm) return;
+    if (!questions.length) return;
+    if (activeSection) return;
+    const status = sectionStatusRef.current || sectionStatus;
+    if (status?.mathematics === "in-progress") {
+      setActiveSection("mathematics");
+      setActiveSubject("math");
+      return;
+    }
+    if (status?.pc === "in-progress") {
+      setActiveSection("pc");
+      setActiveSubject((prev) => (prev === "chemistry" ? "chemistry" : "physics"));
+    }
+  }, [isMhtPcm, questions.length, activeSection, sectionStatus]);
+
+  useEffect(() => {
+    if (!isMhtPcm) return;
     if (!activeSection) return;
 
     const interval = setInterval(() => {
@@ -839,86 +873,43 @@ export function ExamInterfacePageUI() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isMht, activeSection]);
+  }, [isMhtPcm, activeSection]);
 
   useEffect(() => {
-    if (!isMht) return;
+    if (!isMhtPcm) return;
     const cur = activeSectionRef.current;
     if (!cur) return;
     const left = Number(sectionTimers[cur] || 0);
     if (left > 0) return;
-
-    window.alert(`${cur} time is over`);
-
-    setSectionStatus((prev) => {
-      const next = { ...prev, [cur]: "completed" };
-      if (next.physics === "completed" && next.chemistry === "completed") {
-        if (next.mathematics === "locked") next.mathematics = "not-started";
-        if (next.biology === "locked") next.biology = "not-started";
-      }
-      return next;
-    });
-
-    const statusNow = sectionStatusRef.current || {};
-    if (cur === "physics" && statusNow.chemistry !== "completed") {
-      mhtActivateSection("chemistry");
+    if (cur === "pc") {
+      submitPcSection({ reason: "time_over" });
       return;
     }
-    if (cur === "chemistry" && statusNow.physics !== "completed") {
-      mhtActivateSection("physics");
-      return;
-    }
-    if ((statusNow.physics === "completed" || cur === "physics") && (statusNow.chemistry === "completed" || cur === "chemistry")) {
-      if ((questionIndexesByMhtSection.mathematics || []).length > 0) {
-        mhtActivateSection("mathematics");
-        return;
-      }
-      if ((questionIndexesByMhtSection.biology || []).length > 0) {
-        mhtActivateSection("biology");
-        return;
+    if (cur === "mathematics") {
+      if (!submittedRef.current) {
+        submittedRef.current = true;
+        autosave({ reason: "math_time_over" }).finally(() => onSubmit());
       }
     }
-    setActiveSection(null);
-  }, [isMht, sectionTimers, mhtActivateSection]);
+  }, [isMhtPcm, sectionTimers, submitPcSection, autosave, onSubmit]);
+
+  const onNextMhtSubject = useCallback(() => {
+    if (activeSection !== "pc") return;
+    setShowSectionSubmitModal(true);
+  }, [activeSection]);
 
   const handleConfirmSectionSubmit = useCallback(async () => {
     setShowSectionSubmitModal(false);
-    
-    // 1. mark section as completed + update completedSections
-    setCompletedSections((prev) => [...prev, activeSection]);
-    console.log(`[DEBUG GUARD] Section completes: ${activeSection}`);
-    
-    let targetSection = null;
-
-    // 2. unlock next section & lock current section
-    setSectionStatus((prev) => {
-      const nextStatus = { ...prev };
-      nextStatus[activeSection] = "completed"; // lock current
-      
-      if (activeSection === "physics") {
-         targetSection = prev.chemistry === "locked" ? "chemistry" : (mhtOrderedSubjects.includes("mathematics") ? "mathematics" : "biology");
-      } else if (activeSection === "chemistry") {
-         targetSection = prev.physics === "locked" ? "physics" : (mhtOrderedSubjects.includes("mathematics") ? "mathematics" : "biology");
-      }
-
-      if (targetSection && nextStatus[targetSection] === "locked") {
-        nextStatus[targetSection] = "not-started";
-        console.log(`[DEBUG GUARD] Next section unlocks: ${targetSection}`);
-      }
-      return nextStatus;
-    });
-
-    // 3. Navigate
-    setTimeout(() => {
-      if (targetSection) mhtActivateSection(targetSection);
-    }, 0);
-    
-    await autosave({ reason: "section_submit" });
-  }, [activeSection, mhtActivateSection, autosave, mhtOrderedSubjects]);
+    await submitPcSection({ reason: "manual" });
+  }, [submitPcSection]);
 
   if (!attempt || !test) {
     return (
-      <ExamSecurityLayer userId={user?.id || user?._id} testAttemptId={attempt?.id}>
+      <ExamSecurityLayer
+        userId={user?.id || user?._id}
+        testAttemptId={attempt?.id}
+        onViolation={(type) => setWarning({ show: true, type })}
+      >
         <ExamShell variant={test?.exam?.includes("MHT") ? "mhtcet" : "jee"}>
           <div className="flex items-center justify-center p-6">
             <div className="w-full max-w-xl rounded-lg border border-secondary-200 bg-white p-6 text-secondary-700">
@@ -932,7 +923,11 @@ export function ExamInterfacePageUI() {
   }
 
   return (
-    <ExamSecurityLayer userId={user?.id || user?._id} testAttemptId={attempt?.id}>
+    <ExamSecurityLayer
+      userId={user?.id || user?._id}
+      testAttemptId={attempt?.id}
+      onViolation={(type) => setWarning({ show: true, type })}
+    >
       <ExamShell variant={isMht ? "mhtcet" : "jee"}>
       {error ? (
         <div className="mb-2 px-4">
@@ -942,18 +937,27 @@ export function ExamInterfacePageUI() {
         </div>
       ) : null}
 
+      {warningCount > 0 && (
+        <div className="mb-2 px-4">
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-600">
+            Cheating Warning {warningCount} / {MAX_WARNINGS}: Do not exit fullscreen or right-click. Test will auto-submit on maximum warnings.
+          </div>
+        </div>
+      )}
+
       {isMht ? (
         <ExamLayoutMHTCET
           testName={test.name}
           endsAt={endsAt}
           secondsLeft={timeLeftSec}
           subjectTimers={sectionTimers}
-          activeSubject={activeSection || ""}
+          activeSection={activeSection}
+          activeSubject={activeSubject}
           subjects={mhtSubjects}
           sectionStatus={sectionStatus}
-          onSwitchSubject={(sectionKey) => handleSectionSwitch(sectionKey)}
-          totalQuestions={activeMhtIndexes.length || currentSubjectTotalQuestions}
-          currentIndex={Math.max(0, mhtCurrentPos)}
+          onSwitchSubject={(target) => handleSectionSwitch(target)}
+          totalQuestions={isMhtPcm ? (activeMhtIndexes.length || currentSubjectTotalQuestions) : questions.length}
+          currentIndex={isMhtPcm ? Math.max(0, mhtCurrentPos) : currentPos}
           activeQuestionIndex={currentIndex}
           currentQuestion={currentQuestion}
           currentAnswer={currentAnswer}
@@ -969,24 +973,19 @@ export function ExamInterfacePageUI() {
           }}
           onToggleReview={onToggleReview}
           isMarkedForReview={isMarkedForReview}
-          onPrevious={mhtOnPrevious}
-          onNext={mhtOnNext}
-          canGoBack={mhtCanGoBack}
-          canGoNext={mhtCanGoNext}
-          indexes={activeMhtIndexes}
+          onPrevious={isMhtPcm ? mhtOnPrevious : onPrevious}
+          onNext={isMhtPcm ? mhtOnNext : onNext}
+          onSaveAndNext={onSaveAndNext}
+          canGoBack={isMhtPcm ? mhtCanGoBack : canGoBack}
+          canGoNext={isMhtPcm ? mhtCanGoNext : canGoNext}
+          indexes={isMhtPcm ? activeMhtIndexes : sectionQuestionIndexes}
           getStatusForPalette={getStatusForPalette}
           getPaletteLabel={(idx) => questionNumberByIndex.get(idx) || idx + 1}
           onSelectQuestion={(idx) => goToQuestion(idx)}
-          showNextSection={
-            !mhtCanGoNext &&
-            activeMhtIndexes.length > 0 &&
-            activeSection !== "mathematics" &&
-            activeSection !== "biology" &&
-            !!mhtNextSubject
-          }
+          showNextSection={isMhtPcm && activeSection === "pc"}
           onNextSection={onNextMhtSubject}
-          nextSectionLabel={mhtNextSubject ? `Next: ${displaySubjectNameFromKey(mhtNextSubject === "mathematics" ? "math" : mhtNextSubject)}` : "Next Subject"}
-          showSubmit={!mhtCanGoNext && activeMhtIndexes.length > 0 && (activeSection === "mathematics" || activeSection === "biology")}
+          nextSectionLabel="Next Section"
+          showSubmit={isSingleSubject || activeSection === "mathematics"}
           onSubmit={() => setShowSubmitConfirm(true)}
         />
       ) : (
@@ -1021,6 +1020,7 @@ export function ExamInterfacePageUI() {
           isMarkedForReview={isMarkedForReview}
           onPrevious={onPrevious}
           onNext={onNext}
+          onSaveAndNext={onSaveAndNext}
           canGoBack={canGoBack}
           canGoNext={canGoNext}
           onSubmit={() => setShowSubmitConfirm(true)}
@@ -1042,75 +1042,45 @@ export function ExamInterfacePageUI() {
       </Modal>
 
       <Modal
-        isOpen={isMht && showStartSectionModal}
+        isOpen={isMhtPcm && showStartSectionModal}
         onClose={() => {}}
-        title="Choose your first section"
-        submitLabel={null}
-        closeLabel={null}
-      >
-        <p className="text-sm text-secondary-900 mb-3">Choose your first section: Physics or Chemistry</p>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            className="rounded-md border border-secondary-300 bg-white px-4 py-2 text-sm font-semibold text-secondary-900 hover:bg-secondary-50"
-            onClick={async () => {
-              await requestFullscreenSafe();
-              setShowStartSectionModal(false);
-              setSectionStatus(prev => ({ ...prev, chemistry: "locked", physics: "in-progress" }));
-              mhtActivateSection("physics");
-            }}
-          >
-            Physics
-          </button>
-          <button
-            type="button"
-            className="rounded-md border border-secondary-300 bg-white px-4 py-2 text-sm font-semibold text-secondary-900 hover:bg-secondary-50"
-            onClick={async () => {
-              await requestFullscreenSafe();
-              setShowStartSectionModal(false);
-              setSectionStatus(prev => ({ ...prev, physics: "locked", chemistry: "in-progress" }));
-              mhtActivateSection("chemistry");
-            }}
-          >
-            Chemistry
-          </button>
-        </div>
-      </Modal>
-
-      <Modal
-        isOpen={!!pendingSectionSwitch}
-        onClose={() => setPendingSectionSwitch(null)}
-        title={pendingSectionSwitch?.active === "physics" || pendingSectionSwitch?.active === "chemistry" ? `Submit ${displaySubjectNameFromKey(pendingSectionSwitch?.active)} section?` : `Start ${displaySubjectNameFromKey(pendingSectionSwitch?.target)} section?`}
-        submitLabel="Confirm"
+        title="Start Physics + Chemistry section?"
+        submitLabel="Start"
         closeLabel="Cancel"
         onSubmit={async () => {
-           const { target, updatedStatus } = pendingSectionSwitch;
-           setSectionStatus(updatedStatus);
-           setActiveSection(target);
-           const idx = (questionIndexesByMhtSection[target] || [])[0];
-           if (typeof idx === "number") goToQuestion(idx);
-           await autosave({ reason: "section_switch" });
-           setPendingSectionSwitch(null);
+          await requestFullscreenSafe();
+          setShowStartSectionModal(false);
+          setSectionStatus({ pc: "in-progress", mathematics: "locked" });
+          setActiveSection("pc");
+          setActiveSubject("physics");
+          const idx = (subjectQuestionIndexesMap.physics || [])[0];
+          if (typeof idx === "number") goToQuestion(idx);
+          await autosave({ reason: "pc_start" });
         }}
       >
         <p className="text-sm text-secondary-700">
-           {pendingSectionSwitch?.target === "mathematics" || pendingSectionSwitch?.target === "biology" 
-             ? `You are about to start the ${displaySubjectNameFromKey(pendingSectionSwitch?.target)} section. Once you start it, you cannot go back.`
-             : `Are you sure you want to submit the ${displaySubjectNameFromKey(pendingSectionSwitch?.active)} section? You will not be able to change your answers.`}
+          This will start the <span className="font-semibold">Physics + Chemistry</span> section. You can switch freely between Physics and Chemistry questions during this section.
         </p>
       </Modal>
+
       <Modal
         isOpen={showSectionSubmitModal}
         onClose={() => setShowSectionSubmitModal(false)}
-        title={`Submit ${displaySubjectNameFromKey(activeSection)}?`}
+        title="Submit Physics + Chemistry Section?"
         submitLabel="Confirm"
         closeLabel="Cancel"
         onSubmit={handleConfirmSectionSubmit}
       >
         <p className="text-sm text-secondary-700">
-          Are you sure you want to submit the {displaySubjectNameFromKey(activeSection)} section? You will not be able to return to it.
+          Are you sure you want to submit this section? You will not be able to return. You can submit even if partially attempted.
         </p>
       </Modal>
+
+      <CheatingWarningModal
+        isOpen={warning.show}
+        eventType={warning.type}
+        onConfirm={() => setWarning({ show: false, type: "" })}
+      />
     </ExamShell>
     </ExamSecurityLayer>
   );

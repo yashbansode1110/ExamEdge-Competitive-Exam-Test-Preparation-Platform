@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { apiFetch } from "../../services/api";
 
-export function ExamSecurityLayer({ userId, testAttemptId, children }) {
+export function ExamSecurityLayer({ userId, testAttemptId, onViolation, children }) {
   const throttleRef = useRef({});
 
   useEffect(() => {
@@ -13,6 +13,9 @@ export function ExamSecurityLayer({ userId, testAttemptId, children }) {
       // throttle 3 seconds per event type
       if (now - lastTime < 3000) return;
       throttleRef.current[type] = now;
+
+      // Trigger UI warning if callback provided
+      if (onViolation) onViolation(type);
 
       try {
         await apiFetch("/api/cheating/log", {
@@ -27,30 +30,49 @@ export function ExamSecurityLayer({ userId, testAttemptId, children }) {
 
     const handleVisibility = () => {
       if (document.hidden) {
-        logCheatingEvent("tab_switch");
+        logCheatingEvent("TAB_HIDDEN");
       }
     };
 
     const handleFullscreen = () => {
       if (!document.fullscreenElement) {
-        logCheatingEvent("fullscreen_exit");
+        if (window.__EXAM_SUBMITTING__) return;
+        logCheatingEvent("FULLSCREEN_EXIT");
+        // Force re-enter fullscreen
+        document.documentElement.requestFullscreen().catch(() => {});
       }
     };
 
     const handleCopyPaste = (e) => {
-      logCheatingEvent("copy_attempt", { action: e.type });
+      e.preventDefault();
+      logCheatingEvent("COPY_BLOCKED", { action: e.type });
     };
 
     const handleContextMenu = (e) => {
-      logCheatingEvent("right_click");
+      e.preventDefault();
+      if (window.__EXAM_SUBMITTING__) return;
+      logCheatingEvent("RIGHT_CLICK_BLOCKED");
     };
 
     const handleKeyDown = (e) => {
       const key = (e.key || "").toLowerCase();
+      
+      // Block Escape key exit
+      if (key === "escape") {
+        e.preventDefault();
+      }
+
       const combo = e.ctrlKey || e.metaKey;
       if (combo && ["c", "v", "x", "a"].includes(key)) {
-        logCheatingEvent("copy_attempt", { key });
+        e.preventDefault();
+        logCheatingEvent("COPY_SHORTCUT_BLOCKED", { key });
       }
+    };
+
+    const handleSelectStart = (e) => {
+      const tag = (e.target?.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea") return;
+      e.preventDefault();
     };
 
     let devtoolsOpen = false;
@@ -61,23 +83,16 @@ export function ExamSecurityLayer({ userId, testAttemptId, children }) {
       const isOpen = widthDiff > threshold || heightDiff > threshold;
 
       if (isOpen && !devtoolsOpen) {
-        logCheatingEvent("devtools_open", { widthDiff, heightDiff });
+        logCheatingEvent("DEVTOOLS_OPEN", { widthDiff, heightDiff });
       }
       devtoolsOpen = isOpen;
     };
 
     // Multiple tab detection
     const storageKey = "exam_active_session";
-    if (localStorage.getItem(storageKey)) {
-      logCheatingEvent("multiple_tab");
-    } else {
-      localStorage.setItem(storageKey, "true");
-    }
-
     const handleStorage = (e) => {
-      // Also catch if another tab sets it while we are open
       if (e.key === storageKey && e.newValue) {
-        logCheatingEvent("multiple_tab");
+        logCheatingEvent("MULTI_TAB_DETECTED");
       }
     };
 
@@ -87,11 +102,22 @@ export function ExamSecurityLayer({ userId, testAttemptId, children }) {
     document.addEventListener("paste", handleCopyPaste);
     document.addEventListener("cut", handleCopyPaste);
     document.addEventListener("contextmenu", handleContextMenu);
-    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("keydown", handleKeyDown, { capture: true });
+    document.addEventListener("selectstart", handleSelectStart);
     window.addEventListener("resize", checkDevtools);
     window.addEventListener("storage", handleStorage);
 
     const devtoolsInterval = setInterval(checkDevtools, 2000);
+
+    // Initial fullscreen on click if not already
+    const handleFirstClick = () => {
+      if (window.__EXAM_SUBMITTING__) return;
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      }
+      window.removeEventListener("click", handleFirstClick);
+    };
+    window.addEventListener("click", handleFirstClick);
 
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
@@ -100,13 +126,14 @@ export function ExamSecurityLayer({ userId, testAttemptId, children }) {
       document.removeEventListener("paste", handleCopyPaste);
       document.removeEventListener("cut", handleCopyPaste);
       document.removeEventListener("contextmenu", handleContextMenu);
-      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("keydown", handleKeyDown, { capture: true });
+      document.removeEventListener("selectstart", handleSelectStart);
       window.removeEventListener("resize", checkDevtools);
       window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("click", handleFirstClick);
       clearInterval(devtoolsInterval);
-      localStorage.removeItem(storageKey);
     };
-  }, [testAttemptId, userId]);
+  }, [testAttemptId, userId, onViolation]);
 
   return <>{children}</>;
 }

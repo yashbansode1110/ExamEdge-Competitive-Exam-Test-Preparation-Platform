@@ -94,11 +94,11 @@ function computeContentHash({ exam, subject, chapter, topic, type, text, stateme
 function examMatchFilter(exam) {
   const value = String(exam || "").trim();
   if (!value) return undefined;
-  if (value.toUpperCase().includes("MHT-CET")) {
+  if (value.toUpperCase().includes("MHT-CET") || value.toUpperCase().replace(/\s|-/g,"") === "MHTCET") {
     return { $in: ["MHT-CET", "MHT-CET (PCM)", "MHT-CET (PCB)"] };
   }
-  if (value.toUpperCase().includes("JEE MAIN")) {
-    return { $in: ["JEE Main", "JEE Main (PCM)"] };
+  if (value.toUpperCase().includes("JEE MAIN") || value.toUpperCase() === "JEE") {
+    return { $in: ["JEE Main", "JEE Main (PCM)", "JEE"] };
   }
   return value;
 }
@@ -283,41 +283,82 @@ export async function adminBulkUploadQuestions(req, res, next) {
         ok: false,
         message: rowErrors.length ? `Validation failed for all rows. First error: row 1 - ${rowErrors[0].message}` : "No valid questions found",
         insertedCount: 0,
-        duplicateCount: 0,
+        skippedCount: 0,
+        totalRows: rows.length,
         rowErrorCount: rowErrors.length,
         rowErrors,
         insertErrors: []
       });
     }
 
-    let insertedCount = 0;
-    const insertErrors = [];
+    // --- OPTIONAL (BETTER): Pre-filter duplicates ---
+    // Compute hashes for docs to check against DB
+    const docsWithHashes = docs.map((d) => ({
+      ...d,
+      contentHash: computeContentHash(d)
+    }));
+    const hashes = docsWithHashes.map((d) => d.contentHash);
 
-    try {
-      const inserted = await Question.insertMany(docs, { ordered: false });
-      insertedCount = inserted.length;
-    } catch (e) {
-      if (Array.isArray(e?.insertedDocs) && e.insertedDocs.length) insertedCount = e.insertedDocs.length;
-      if (typeof e?.insertedCount === "number" && e.insertedCount > insertedCount) insertedCount = e.insertedCount;
-      const writeErrors = e?.writeErrors || e?.result?.writeErrors || e?.result?.result?.writeErrors;
-      if (Array.isArray(writeErrors) && writeErrors.length) {
-        for (const we of writeErrors) {
-          insertErrors.push({
-            index: we.index,
-            code: we.code,
-            message: we.errmsg || we.err?.message || "Write error"
-          });
-        }
-      } else if (insertedCount === 0) {
-        return next(e);
+    // Bulk check existing hashes in DB
+    const existing = await Question.find({ contentHash: { $in: hashes } }).select("contentHash").lean();
+    const existingHashes = new Set(existing.map((e) => e.contentHash));
+
+    // Filter out duplicates (both against DB and within the file)
+    const toInsert = [];
+    const seenInFile = new Set();
+    let selfDuplicateCount = 0;
+    let dbDuplicateCount = 0;
+
+    for (const d of docsWithHashes) {
+      if (existingHashes.has(d.contentHash)) {
+        dbDuplicateCount++;
+      } else if (seenInFile.has(d.contentHash)) {
+        selfDuplicateCount++;
+      } else {
+        toInsert.push(d);
+        seenInFile.add(d.contentHash);
       }
     }
 
-    const ok = rowErrors.length === 0 && insertErrors.length === 0;
+    const preSkippedCount = dbDuplicateCount + selfDuplicateCount;
+
+    let insertedCount = 0;
+    const insertErrors = [];
+    let skippedDuplicates = preSkippedCount > 0;
+
+    if (toInsert.length > 0) {
+      try {
+        const result = await Question.insertMany(toInsert, { ordered: false });
+        insertedCount = result.length;
+      } catch (err) {
+        if (err.name === "MongoBulkWriteError" || err.code === 11000) {
+          skippedDuplicates = true;
+          insertedCount = err.result?.nInserted || 0;
+          
+          const writeErrors = err.writeErrors || [];
+          for (const we of writeErrors) {
+            insertErrors.push({
+              index: we.index,
+              code: we.code,
+              message: we.code === 11000 ? "Duplicate question (already exists)" : (we.errmsg || "Write error")
+            });
+          }
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    const totalSkipped = preSkippedCount + (insertErrors.filter(e => e.code === 11000).length);
+    const ok = rowErrors.length === 0 && insertErrors.length === 0 && preSkippedCount === 0;
+
     res.status(ok ? 201 : 207).json({
       ok,
       totalRows: rows.length,
       insertedCount,
+      skippedCount: totalSkipped,
+      skippedDuplicates,
+      message: skippedDuplicates ? "Some duplicate questions were skipped" : "Upload completed successfully",
       rowErrorCount: rowErrors.length,
       rowErrors,
       insertErrorCount: insertErrors.length,

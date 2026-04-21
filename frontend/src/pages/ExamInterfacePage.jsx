@@ -41,6 +41,13 @@ export function ExamInterfacePage() {
 
   const activeQStartedAtRef = useRef(Date.now());
   const lastIndexRef = useRef(0);
+  const isSubmittingRef = useRef(false);
+
+  useEffect(() => {
+    return () => {
+      window.__EXAM_SUBMITTING__ = false;
+    };
+  }, []);
 
   const sessionIdKey = useMemo(() => `examedge_test_session_${testId}`, [testId]);
   const sessionId = useMemo(() => getOrCreateSessionId(sessionIdKey), [sessionIdKey]);
@@ -50,6 +57,7 @@ export function ExamInterfacePage() {
   useExamSecurity({
     channelKey: `examedge_guard_${testId}`,
     sessionId,
+    isSubmittingRef,
     onCheat: (evt) => cheatQueueRef.current.push(evt),
     onNetwork: (evt) => networkQueueRef.current.push(evt)
   });
@@ -199,6 +207,16 @@ export function ExamInterfacePage() {
 
   async function onSubmit() {
     if (!accessToken || !attempt?.id) return;
+    
+    window.__EXAM_SUBMITTING__ = true;
+    isSubmittingRef.current = true;
+
+    try {
+      if (document.fullscreenElement && document.exitFullscreen) {
+        await document.exitFullscreen().catch(() => {});
+      }
+    } catch {}
+
     try {
       const data = await apiFetch("/tests/submit", {
         method: "POST",

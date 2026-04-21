@@ -42,6 +42,12 @@ export function ExamInterfaceMHTCET() {
     setLoading(false);
   }, [testId]);
 
+  useEffect(() => {
+    return () => {
+      window.__EXAM_SUBMITTING__ = false;
+    };
+  }, []);
+
   // Timer effect
   useEffect(() => {
     const interval = setInterval(() => {
@@ -81,7 +87,15 @@ export function ExamInterfaceMHTCET() {
     }
   };
 
-  const handleSubmitExam = () => {
+  const handleSubmitExam = async () => {
+    window.__EXAM_SUBMITTING__ = true;
+    try {
+      // Exit fullscreen BEFORE navigation
+      if (document.fullscreenElement && document.exitFullscreen) {
+        await document.exitFullscreen();
+      }
+    } catch {}
+
     navigate("/exam/results", {
       state: {
         answers,

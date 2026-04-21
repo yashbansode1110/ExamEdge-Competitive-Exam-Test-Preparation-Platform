@@ -13,12 +13,14 @@
     "chart.js": "latest",
     "framer-motion": "^12.38.0",
     "katex": "latest",
+    "lucide-react": "^1.8.0",
     "react": "latest",
     "react-chartjs-2": "latest",
     "react-dom": "latest",
     "react-katex": "latest",
     "react-redux": "latest",
-    "react-router-dom": "latest"
+    "react-router-dom": "latest",
+    "recharts": "^3.8.1"
   },
   "devDependencies": {
     "@types/react": "latest",

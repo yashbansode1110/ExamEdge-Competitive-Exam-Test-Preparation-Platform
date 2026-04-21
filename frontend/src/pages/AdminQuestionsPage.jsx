@@ -170,125 +170,9 @@ export function AdminQuestionsPage() {
     }
   }
 
-  // -------------------------
-  // AI Generator (new)
-  // -------------------------
-  const [aiExam, setAiExam] = useState("JEE Main (PCM)");
-  const [aiSubject, setAiSubject] = useState("Mathematics");
-  const [aiChapter, setAiChapter] = useState(SUBJECT_CHAPTERS.Mathematics[0]);
-  const [aiTopic, setAiTopic] = useState("");
-  const [aiDifficulty, setAiDifficulty] = useState("Medium"); // Easy | Medium | Hard
-  const [aiCount, setAiCount] = useState(5);
-
-  const [aiBusy, setAiBusy] = useState(false);
-  const [aiSaving, setAiSaving] = useState(false);
-  const [aiPreviewQuestions, setAiPreviewQuestions] = useState([]);
-
   const [uploadFile, setUploadFile] = useState(null);
   const [uploadPreview, setUploadPreview] = useState(null);
   const [uploadBusy, setUploadBusy] = useState(false);
-
-  const allowedAiSubjects = useMemo(() => {
-    const v = String(aiExam || "").toUpperCase();
-    if (v.includes("MHT-CET") && v.includes("PCB")) return ["Physics", "Chemistry", "Biology"];
-    if (v.includes("MHT-CET") && v.includes("PCM")) return ["Physics", "Chemistry", "Mathematics"];
-    if (v.includes("JEE")) return ["Physics", "Chemistry", "Mathematics"];
-    return Object.keys(SUBJECT_CHAPTERS);
-  }, [aiExam]);
-
-  function aiDifficultyLabelToNumber(label) {
-    if (label === "Easy") return 2;
-    if (label === "Medium") return 3;
-    return 5; // Hard
-  }
-
-  async function onGenerateQuestions(e) {
-    e.preventDefault();
-    setError("");
-    setSuccess("");
-    setAiPreviewQuestions([]);
-    setAiBusy(true);
-
-    try {
-      if (!accessToken) throw new Error("Not authenticated");
-      if (!String(user?.role || "").toLowerCase().includes("admin")) throw new Error("Admin access required");
-      if (!aiTopic.trim()) throw new Error("Topic is required");
-
-      const data = await apiFetch("/api/generate-questions", {
-        method: "POST",
-        token: accessToken,
-        body: {
-          exam: aiExam,
-          subject: aiSubject,
-          topic: aiTopic,
-          difficulty: aiDifficulty,
-          count: Number(aiCount)
-        }
-      });
-
-      setAiPreviewQuestions(data.questions || []);
-      setSuccess(`Generated ${data.questions?.length || 0} questions. Preview below.`);
-    } catch (err) {
-      setError(err.message || "Failed to generate questions");
-    } finally {
-      setAiBusy(false);
-    }
-  }
-
-  async function onSaveAllAiQuestions() {
-    if (!accessToken) return;
-    if (!aiPreviewQuestions.length) return;
-
-    setError("");
-    setSuccess("");
-    setAiSaving(true);
-    try {
-      const difficultyNumber = aiDifficultyLabelToNumber(aiDifficulty);
-      const chapterForAi = aiChapter || aiTopic;
-      const payloadQuestions = aiPreviewQuestions.map((q) => ({
-        exam: aiExam,
-        subject: aiSubject,
-        chapter: chapterForAi,
-        topic: aiTopic,
-        subtopic: "",
-        type: "MCQ",
-        difficulty: difficultyNumber,
-        text: q.question,
-        latex: false,
-        options: ["A", "B", "C", "D"].map((key, idx) => ({
-          key,
-          text: q.options?.[idx] || ""
-        })),
-        correctOptionKey: q.correctAnswer,
-        tags: ["ai-generator"],
-        source: "ai",
-        isActive: true
-      }));
-
-      const result = await apiFetch("/api/admin/questions/bulk", {
-        method: "POST",
-        token: accessToken,
-        body: { questions: payloadQuestions }
-      });
-
-      if (result.failedCount > 0) {
-        const failedIndexes = new Set((result.failures || []).map((f) => f.index));
-        const remaining = aiPreviewQuestions.filter((_q, index) => failedIndexes.has(index));
-        setAiPreviewQuestions(remaining);
-        if (result.createdCount > 0) setSuccess(`${result.createdCount} AI-generated questions saved.`);
-        setError(`${result.failedCount} questions failed to save. They remain in preview for retry.`);
-      } else {
-        setAiPreviewQuestions([]);
-        setSuccess(`${result.createdCount} AI-generated questions saved.`);
-      }
-    } finally {
-      setAiSaving(false);
-    }
-  }
-
-  function onDeleteAiPreviewQuestion(idx) {
-    setAiPreviewQuestions((prev) => prev.filter((_q, i) => i !== idx));
-  }
 
   async function onUploadFileChosen(e) {
     const f = e.target.files?.[0];
@@ -339,19 +223,38 @@ export function AdminQuestionsPage() {
         body: fd,
         allowOkFalse: true
       });
+
       const inserted = data.insertedCount ?? 0;
       const rowErr = data.rowErrorCount ?? 0;
       const insErr = data.insertErrorCount ?? 0;
+      const total = data.totalRows ?? 0;
+      const skipped = data.skippedCount ?? 0;
+      const skippedDupes = data.skippedDuplicates ?? false;
+
       if (data.ok) {
         setSuccess(`Uploaded successfully: ${inserted} questions inserted.`);
         setUploadFile(null);
         setUploadPreview(null);
       } else {
-        setSuccess(inserted ? `${inserted} questions inserted (partial success).` : "");
+        if (skippedDupes) {
+          setSuccess(`Upload completed with duplicates skipped. (Total: ${total}, Inserted: ${inserted}, Skipped: ${skipped})`);
+        } else if (inserted > 0) {
+          setSuccess(`${inserted} questions inserted (partial success).`);
+        }
+
         const firstErr = data.rowErrors?.[0]?.message || data.insertErrors?.[0]?.message || data.message;
-        setError(
-          `Upload finished with issues: ${rowErr} row validation errors, ${insErr} database errors. ${firstErr ? `\nFirst issue: ${firstErr}` : "Check details in response."}`
-        );
+        if (rowErr > 0 || insErr > 0) {
+          setError(
+            `Upload finished with issues: ${rowErr} validation errors, ${insErr} DB errors. ${firstErr ? `\nFirst issue: ${firstErr}` : ""}`
+          );
+        } else if (!data.ok && !skippedDupes) {
+          setError(data.message || "Upload failed with unknown error");
+        }
+        
+        if (inserted > 0) {
+          setUploadFile(null);
+          setUploadPreview(null);
+        }
       }
     } catch (err) {
       setError(err.message || "Upload failed");
@@ -363,42 +266,45 @@ export function AdminQuestionsPage() {
   if (!accessToken) return null;
 
   return (
-    <div className="space-y-4">
-      {error ? <Alert variant="error" dismissible onDismiss={() => setError("")}>{error}</Alert> : null}
-      {success ? <Alert variant="success" dismissible onDismiss={() => setSuccess("")}>{success}</Alert> : null}
+    <div className="space-y-6">
 
-      <div className="flex flex-wrap gap-3">
-        <Button type="button" variant={mode === "manual" ? "primary" : "outline"} onClick={() => setMode("manual")}>
+
+      <div className="flex bg-white rounded-xl shadow-sm p-1 gap-1 border border-secondary-100 max-w-fit mb-6">
+        <button type="button" className={`px-6 py-2.5 text-sm rounded-lg font-medium transition-all ${mode === "manual" ? "bg-blue-600 text-white shadow" : "text-gray-600 hover:bg-gray-50"}`} onClick={() => setMode("manual")}>
           Manual Entry
-        </Button>
-        <Button type="button" variant={mode === "ai" ? "primary" : "outline"} onClick={() => setMode("ai")}>
-          Generate via AI
-        </Button>
-        <Button type="button" variant={mode === "upload" ? "primary" : "outline"} onClick={() => setMode("upload")}>
+        </button>
+        <button type="button" className={`px-6 py-2.5 text-sm rounded-lg font-medium transition-all ${mode === "upload" ? "bg-blue-600 text-white shadow" : "text-gray-600 hover:bg-gray-50"}`} onClick={() => setMode("upload")}>
           Upload Questions
-        </Button>
+        </button>
       </div>
 
       {mode === "upload" ? (
-        <Card>
-          <CardBody className="p-6">
+        <div className="bg-white rounded-2xl shadow-sm border border-secondary-100 p-8 mb-6">
+<div className="max-w-4xl mx-auto">
             <h2 className="text-xl font-bold text-secondary-900 mb-1">Bulk upload (CSV / JSON)</h2>
+            
+            {error ? <Alert variant="error" className="mb-4" dismissible onDismiss={() => setError("")}>{error}</Alert> : null}
+            {success ? <Alert variant="success" className="mb-4" dismissible onDismiss={() => setSuccess("")}>{success}</Alert> : null}
+
             <p className="text-sm text-secondary-600 mb-4">
               Required fields per row: <strong>questionText</strong> (or text), <strong>options</strong> (JSON array of {"{key,text}"} or columns{" "}
               <strong>optionA</strong>…<strong>optionD</strong>), <strong>correctAnswer</strong> (option key), <strong>subject</strong>,{" "}
               <strong>chapter</strong>, <strong>difficulty</strong> (1–5 or easy/medium/hard), <strong>exam</strong> (e.g. JEE Main (PCM)).
             </p>
 
-            <div className="space-y-3">
-              <label className="block text-sm font-medium text-secondary-900">
-                Choose file (.csv or .json)
+            <div className="space-y-6">
+              <div className="border-2 border-dashed border-secondary-300 rounded-xl p-10 flex flex-col items-center justify-center bg-secondary-50 hover:bg-secondary-100 transition-colors cursor-pointer relative">
+                <div className="text-4xl mb-3">📁</div>
+                <div className="text-secondary-900 font-medium mb-1">Upload CSV or JSON file</div>
+                <div className="text-xs text-secondary-500 max-w-sm text-center">Drag and drop your file here or click to browse</div>
                 <input
                   type="file"
                   accept=".csv,.json,text/csv,application/json"
-                  className="mt-1 block w-full text-sm text-secondary-700"
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                   onChange={onUploadFileChosen}
                 />
-              </label>
+                {uploadFile && <div className="mt-4 text-sm font-semibold text-blue-600 bg-blue-50 px-3 py-1 rounded-full">{uploadFile.name}</div>}
+              </div>
 
               {uploadPreview ? (
                 <div className="rounded-lg border border-secondary-200 bg-secondary-50 p-4 text-sm">
@@ -438,22 +344,25 @@ export function AdminQuestionsPage() {
                 </Button>
               </div>
             </div>
-          </CardBody>
-        </Card>
+          </div>
+        </div>
       ) : null}
 
       {mode === "manual" ? (
-        <Card>
-          <CardBody className="p-6">
+        <div className="bg-white rounded-2xl shadow-sm border border-secondary-100 p-8 mb-6">
+<div className="max-w-4xl mx-auto">
             <h2 className="text-xl font-bold text-secondary-900 mb-1">Create Question</h2>
+            {error ? <Alert variant="error" className="mb-4" dismissible onDismiss={() => setError("")}>{error}</Alert> : null}
+            {success ? <Alert variant="success" className="mb-4" dismissible onDismiss={() => setSuccess("")}>{success}</Alert> : null}
+
             <p className="text-sm text-secondary-600 mb-2">Admins can add MCQ or Numerical questions in real time.</p>
             <div className="rounded-md border border-secondary-200 bg-secondary-50 p-3 text-xs text-secondary-700 mb-5">
               <strong>Simple use:</strong> fill one question and click <strong>Create Question</strong>.<br />
               <strong>Batch use:</strong> click <strong>Queue Question</strong> for each question, then <strong>Save All Queued</strong> once.
             </div>
 
-            <form onSubmit={onSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <form onSubmit={onSubmit} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <label className="block text-sm font-medium text-secondary-900">
                   Exam
                   <select
@@ -474,7 +383,7 @@ export function AdminQuestionsPage() {
                         if (list?.length) setChapter(list[0]);
                       }
                     }}
-                    className="w-full mt-1"
+                    className="block w-full mt-2 rounded-lg border-secondary-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-3 border"
                     required
                   >
                     {EXAM_OPTIONS.map((opt) => (
@@ -492,7 +401,7 @@ export function AdminQuestionsPage() {
                     max={5}
                     value={difficulty}
                     onChange={(e) => setDifficulty(Number(e.target.value))}
-                    className="w-full mt-1"
+                    className="block w-full mt-2 rounded-lg border-secondary-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-3 border"
                     required
                   />
                 </label>
@@ -507,7 +416,7 @@ export function AdminQuestionsPage() {
                       const list = SUBJECT_CHAPTERS[next];
                       if (list?.length) setChapter(list[0]);
                     }}
-                    className="w-full mt-1"
+                    className="block w-full mt-2 rounded-lg border-secondary-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-3 border"
                     required
                   >
                     {allowedSubjects.map((s) => (
@@ -522,7 +431,7 @@ export function AdminQuestionsPage() {
                   <select
                     value={chapter}
                     onChange={(e) => setChapter(e.target.value)}
-                    className="w-full mt-1"
+                    className="block w-full mt-2 rounded-lg border-secondary-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-3 border"
                     required
                   >
                     {(SUBJECT_CHAPTERS[subject] || []).map((c) => (
@@ -535,10 +444,10 @@ export function AdminQuestionsPage() {
 
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <label className="block text-sm font-medium text-secondary-900">
                   Question Type
-                  <select value={type} onChange={(e) => setType(e.target.value)} className="w-full mt-1">
+                  <select value={type} onChange={(e) => setType(e.target.value)} className="block w-full mt-2 rounded-lg border-secondary-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-3 border">
                     <option value="MCQ">MCQ</option>
                     <option value="NUMERICAL">NUMERICAL</option>
                   </select>
@@ -555,24 +464,24 @@ export function AdminQuestionsPage() {
 
               <label className="block text-sm font-medium text-secondary-900">
                 Question Text
-                <textarea value={text} onChange={(e) => setText(e.target.value)} className="w-full mt-1 min-h-[140px]" required />
+                <textarea value={text} onChange={(e) => setText(e.target.value)} className="w-full mt-1 min-h-[140px] block w-full mt-2 rounded-lg border-secondary-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-3 border" required />
               </label>
 
               {type === "MCQ" ? (
-                <div className="space-y-3">
+                <div className="space-y-5">
                   <div className="flex items-center justify-between gap-4">
                     <div className="text-sm font-semibold text-secondary-900">Options (A-D)</div>
                     <div className="text-xs text-secondary-600">At least 2 options required</div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {["A", "B", "C", "D"].map((k) => (
                       <label key={k} className="block text-sm font-medium text-secondary-900">
                         {k}
                         <input
                           value={options[k]}
                           onChange={(e) => setOptions((prev) => ({ ...prev, [k]: e.target.value }))}
-                          className="w-full mt-1"
+                          className="block w-full mt-2 rounded-lg border-secondary-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-3 border"
                           required={k === correctOptionKey}
                         />
                       </label>
@@ -581,7 +490,7 @@ export function AdminQuestionsPage() {
 
                   <label className="block text-sm font-medium text-secondary-900">
                     Correct Option Key
-                    <select value={correctOptionKey} onChange={(e) => setCorrectOptionKey(e.target.value)} className="w-full mt-1">
+                    <select value={correctOptionKey} onChange={(e) => setCorrectOptionKey(e.target.value)} className="block w-full mt-2 rounded-lg border-secondary-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-3 border">
                       <option value="A">A</option>
                       <option value="B">B</option>
                       <option value="C">C</option>
@@ -596,7 +505,7 @@ export function AdminQuestionsPage() {
                     type="number"
                     value={numericalAnswer}
                     onChange={(e) => setNumericalAnswer(e.target.value)}
-                    className="w-full mt-1"
+                    className="block w-full mt-2 rounded-lg border-secondary-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-3 border"
                     required
                     step="any"
                   />
@@ -651,181 +560,9 @@ export function AdminQuestionsPage() {
                 </div>
               </details>
             </form>
-          </CardBody>
-        </Card>
-      ) : (
-        <Card>
-          <CardBody className="p-6">
-            <h2 className="text-xl font-bold text-secondary-900 mb-1">AI Question Generator</h2>
-            <p className="text-sm text-secondary-600 mb-5">
-              Generate MCQ questions with preview. Save only the ones you want.
-            </p>
-
-            <form onSubmit={onGenerateQuestions} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <label className="block text-sm font-medium text-secondary-900">
-                  Exam
-                  <select
-                    value={aiExam}
-                    onChange={(e) => {
-                      const nextExam = e.target.value;
-                      setAiExam(nextExam);
-                      const v = String(nextExam || "").toUpperCase();
-                      const nextAllowed =
-                        v.includes("MHT-CET") && v.includes("PCB")
-                          ? ["Physics", "Chemistry", "Biology"]
-                          : ["Physics", "Chemistry", "Mathematics"];
-                      if (!nextAllowed.includes(aiSubject)) {
-                        const fallback = nextAllowed[0];
-                        setAiSubject(fallback);
-                        const list = SUBJECT_CHAPTERS[fallback];
-                        if (list?.length) setAiChapter(list[0]);
-                      }
-                    }}
-                    className="w-full mt-1"
-                    required
-                  >
-                    {EXAM_OPTIONS.map((opt) => (
-                      <option key={opt} value={opt}>
-                        {opt}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="block text-sm font-medium text-secondary-900">
-                  Difficulty
-                  <select value={aiDifficulty} onChange={(e) => setAiDifficulty(e.target.value)} className="w-full mt-1" required>
-                    <option value="Easy">Easy</option>
-                    <option value="Medium">Medium</option>
-                    <option value="Hard">Hard</option>
-                  </select>
-                </label>
-
-                <label className="block text-sm font-medium text-secondary-900">
-                  Subject
-                  <select
-                    value={aiSubject}
-                    onChange={(e) => {
-                      const next = e.target.value;
-                      setAiSubject(next);
-                      const list = SUBJECT_CHAPTERS[next];
-                      if (list?.length) setAiChapter(list[0]);
-                    }}
-                    className="w-full mt-1"
-                    required
-                  >
-                    {allowedAiSubjects.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="block text-sm font-medium text-secondary-900">
-                  Chapter
-                  <select
-                    value={aiChapter}
-                    onChange={(e) => setAiChapter(e.target.value)}
-                    className="w-full mt-1"
-                    required
-                  >
-                    {(SUBJECT_CHAPTERS[aiSubject] || []).map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="block text-sm font-medium text-secondary-900">
-                  Number of Questions
-                  <input
-                    type="number"
-                    min={1}
-                    max={30}
-                    value={aiCount}
-                    onChange={(e) => setAiCount(Number(e.target.value))}
-                    className="w-full mt-1"
-                    required
-                  />
-                </label>
-
-                <label className="block text-sm font-medium text-secondary-900 md:col-span-2">
-                  Topic
-                  <input value={aiTopic} onChange={(e) => setAiTopic(e.target.value)} className="w-full mt-1" required />
-                </label>
-              </div>
-
-              <div className="pt-2">
-                <Button type="submit" variant="primary" disabled={aiBusy} isLoading={aiBusy}>
-                  {aiBusy ? "Generating..." : "Generate Questions"}
-                </Button>
-              </div>
-            </form>
-
-            {aiPreviewQuestions.length ? (
-              <div className="pt-6 space-y-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-semibold text-secondary-900">Preview ({aiPreviewQuestions.length})</div>
-                    <div className="text-xs text-secondary-600">Delete unwanted questions before saving.</div>
-                  </div>
-
-                  <Button
-                    type="button"
-                    variant="primary"
-                    disabled={aiSaving || aiBusy}
-                    isLoading={aiSaving}
-                    onClick={onSaveAllAiQuestions}
-                  >
-                    {aiSaving ? "Saving..." : "Save all"}
-                  </Button>
-                </div>
-
-                <div className="space-y-3">
-                  {aiPreviewQuestions.map((q, idx) => (
-                    <div key={`${idx}`} className="border border-secondary-200 rounded-lg p-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className="text-sm font-semibold text-secondary-900">Q{idx + 1}</div>
-                        </div>
-
-                        <Button type="button" variant="outline" disabled={aiSaving} onClick={() => onDeleteAiPreviewQuestion(idx)}>
-                          Delete
-                        </Button>
-                      </div>
-
-                      <div className="mt-2 whitespace-pre-wrap text-secondary-900">{q.question}</div>
-
-                      <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
-                        {["A", "B", "C", "D"].map((key, optIdx) => (
-                          <div
-                            key={key}
-                            className={
-                              q.correctAnswer === key
-                                ? "rounded-md border border-primary-500 bg-primary-50 p-2"
-                                : "rounded-md border border-secondary-200 p-2"
-                            }
-                          >
-                            <div className="text-xs font-semibold text-secondary-900">{key}</div>
-                            <div className="text-sm text-secondary-900">{q.options?.[optIdx] || ""}</div>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="mt-2 text-xs text-secondary-600">
-                        Correct answer: <span className="font-mono">{q.correctAnswer}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-          </CardBody>
-        </Card>
-      )}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

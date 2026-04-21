@@ -9,13 +9,14 @@ import { apiLimiter } from "./middleware/rateLimiter.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { authRoutes } from "./routes/authRoutes.js";
 import { questionRoutes } from "./routes/questionRoutes.js";
-import { aiGenerationRoutes } from "./routes/aiGenerationRoutes.js";
 import { testRoutes } from "./routes/testRoutes.js";
 import { analyticsRoutes } from "./routes/analyticsRoutes.js";
+import { aiRoute } from "./routes/aiRoute.js";
 import { adminTestRoutes } from "./routes/adminTestRoutes.js";
 import { adminCheatingRoutes, cheatingRoutes } from "./routes/cheatingRoutes.js";
 import { testSessionRoutes } from "./routes/testSessionRoutes.js";
 import { adminQuestionRoutes } from "./routes/adminQuestionRoutes.js";
+import { paymentRoutes } from "./routes/paymentRoute.js";
 
 export const app = express();
 
@@ -45,16 +46,18 @@ app.use("/questions", questionRoutes);
 app.use("/admin/questions", adminQuestionRoutes);
 app.use("/tests", testRoutes);
 app.use("/analytics", analyticsRoutes);
+app.use("/ai", aiRoute);
 
 // Also expose under /api for compatibility
 app.use("/api/auth", authRoutes);
 app.use("/api/questions", questionRoutes);
 app.use("/api/admin/questions", adminQuestionRoutes);
-app.use("/api", aiGenerationRoutes);
 app.use("/api/tests", testRoutes);
 app.use("/api/test-sessions", testSessionRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/cheating", cheatingRoutes);
+app.use("/api/payment", paymentRoutes);
+app.use("/api/ai", aiRoute);
 app.use("/api/admin/cheating-logs", adminCheatingRoutes);
 
 app.use("/admin/tests", adminTestRoutes);

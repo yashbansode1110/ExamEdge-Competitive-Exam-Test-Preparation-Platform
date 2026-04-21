@@ -69,11 +69,11 @@ export default defineConfig(({ mode }) => {
     ],
     server: {
       port: 5173,
+      historyApiFallback: true,
       proxy: {
         "/api": { target: backendTarget, changeOrigin: true },
         "/auth": { target: backendTarget, changeOrigin: true },
         "/tests": { target: backendTarget, changeOrigin: true },
-        "/analytics": { target: backendTarget, changeOrigin: true },
       },
     },
   };

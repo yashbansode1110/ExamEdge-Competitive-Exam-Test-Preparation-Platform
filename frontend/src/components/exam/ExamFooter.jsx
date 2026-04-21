@@ -12,6 +12,7 @@ export function ExamFooter({
   onPrevious,
   onNext,
   onMarkForReview,
+  onSaveAndNext,
   isMarkedForReview = false,
 }) {
   return (
@@ -41,6 +42,14 @@ export function ExamFooter({
 
         <Button
           variant="primary"
+          size="sm"
+          onClick={onSaveAndNext}
+        >
+          Save & Next
+        </Button>
+
+        <Button
+          variant="secondary"
           size="sm"
           disabled={!canGoNext}
           onClick={onNext}

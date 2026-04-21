@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { listTests, getTestById, startTest, autosaveAttempt, submitAttempt, getAttemptResult } from "../services/testEngineService.js";
 import { TestAttempt } from "../models/TestAttempt.js";
-import { notFound } from "../middleware/errorHandler.js";
+import { User } from "../models/User.js";
+import { notFound, forbidden } from "../middleware/errorHandler.js";
 import { persistCheatEventsFromAutosave } from "./cheatingController.js";
 
 export async function getTests(req, res, next) {
@@ -33,12 +34,31 @@ export async function start(req, res, next) {
       })
       .parse(req.body);
 
+    const user = await User.findById(req.user.id);
+    if (!user) throw notFound("User not found");
+
+    if (!user.isPremium && user.testsAttempted >= 2) {
+      // Allow resuming
+      const existingAttempt = await TestAttempt.findOne({
+        userId: req.user.id,
+        testId: body.testId,
+        status: "in_progress"
+      });
+      if (!existingAttempt) {
+        throw forbidden("TEST_LIMIT_REACHED", "You have reached your 2 free tests limit. Please upgrade to premium.");
+      }
+    }
+
     const { test, attempt, resumed } = await startTest({
       userId: req.user.id,
       testId: body.testId,
       sessionId: body.sessionId,
       deviceId: body.deviceId
     });
+
+    if (!resumed && !user.isPremium) {
+      await User.updateOne({ _id: user._id }, { $inc: { testsAttempted: 1 } });
+    }
 
     res.status(resumed ? 200 : 201).json({
       ok: true,

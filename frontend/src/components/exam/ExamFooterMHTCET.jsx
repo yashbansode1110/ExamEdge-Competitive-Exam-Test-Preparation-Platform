@@ -11,6 +11,7 @@ export function ExamFooterMHTCET({
   canGoNext = true,
   onPrevious,
   onNext,
+  onSaveAndNext,
   showNextSection = false,
   onNextSection,
   nextSectionLabel = "Next Subject",
@@ -33,16 +34,21 @@ export function ExamFooterMHTCET({
           <Button type="button" variant={isMarkedForReview ? "primary" : "outline"} size="sm" onClick={onToggleReview}>
             {isMarkedForReview ? "Marked for Review" : "Mark for Review"}
           </Button>
+
+          <Button variant="primary" size="sm" onClick={onSaveAndNext}>
+            Save & Next
+          </Button>
+
           {showSubmit ? (
             <Button variant="danger" size="sm" onClick={onSubmit}>
               Submit Test
             </Button>
           ) : showNextSection ? (
-            <Button variant="primary" size="sm" onClick={onNextSection}>
+            <Button variant="outline" size="sm" onClick={onNextSection}>
               {nextSectionLabel} →
             </Button>
           ) : (
-            <Button variant="primary" size="sm" disabled={!canGoNext} onClick={onNext}>
+            <Button variant="secondary" size="sm" disabled={!canGoNext} onClick={onNext}>
               Next →
             </Button>
           )}

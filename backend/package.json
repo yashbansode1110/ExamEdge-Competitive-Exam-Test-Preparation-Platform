@@ -11,6 +11,7 @@
     "start": "node server.js"
   },
   "dependencies": {
+    "@google/genai": "^1.50.1",
     "bcrypt": "latest",
     "compression": "latest",
     "cors": "latest",
@@ -26,6 +27,7 @@
     "multer": "^2.1.1",
     "openai": "^6.32.0",
     "pdfkit": "^0.18.0",
+    "razorpay": "^2.9.6",
     "zod": "latest"
   },
   "engines": {

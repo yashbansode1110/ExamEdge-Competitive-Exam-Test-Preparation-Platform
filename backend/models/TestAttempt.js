@@ -95,6 +95,8 @@ const TestAttemptSchema = new Schema(
     wrongCount: { type: Number, default: 0 },
     unattemptedCount: { type: Number, default: 0 },
     sectionStats: { type: [SectionStatSchema], default: [] },
+    subjectStats: { type: Schema.Types.Mixed, default: {} },
+    totalQuestions: { type: Number, default: 0 },
     timeUsed: { type: Number, default: 0, min: 0 },
     rank: { type: Number, default: 0, min: 0 },
     breakdown: { type: Schema.Types.Mixed, default: {} }

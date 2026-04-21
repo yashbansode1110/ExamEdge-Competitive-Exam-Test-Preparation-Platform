@@ -25,6 +25,9 @@ export function TestSelectionPage() {
   const [filter, setFilter] = useState("all"); // all | JEE Main | MHT-CET
   const [selectedTest, setSelectedTest] = useState(null);
   const [startBusy, setStartBusy] = useState(false);
+  // Track premium and test limit
+  const [isPremium, setIsPremium] = useState(false);
+  const [testsAttempted, setTestsAttempted] = useState(0);
 
   const pageSessionKey = useMemo(() => `examedge_page_session_${Date.now()}`, []);
   const pageSessionId = useMemo(
@@ -42,8 +45,22 @@ export function TestSelectionPage() {
       setLoading(true);
       setError("");
       try {
+        // Fetch tests
         const data = await apiFetch("/tests", { token: accessToken });
         if (!cancelled) setTests(data.items || []);
+        // Fetch user info (assume /me endpoint or from redux user)
+        // If user object has isPremium and testsAttempted, use it
+        if (user) {
+          setIsPremium(!!user.isPremium);
+          setTestsAttempted(user.testsAttempted || 0);
+        } else {
+          // fallback: fetch /me if needed
+          try {
+            const me = await apiFetch("/auth/me", { token: accessToken });
+            setIsPremium(!!me.isPremium);
+            setTestsAttempted(me.testsAttempted || 0);
+          } catch {}
+        }
       } catch (e) {
         if (!cancelled) setError(e.message);
       } finally {
@@ -54,7 +71,7 @@ export function TestSelectionPage() {
     return () => {
       cancelled = true;
     };
-  }, [accessToken]);
+  }, [accessToken, user]);
 
   const filtered = useMemo(() => {
     if (filter === "all") return tests;
@@ -77,6 +94,9 @@ export function TestSelectionPage() {
     );
   }
 
+  // Free limit logic
+  const freeLimitReached = !isPremium && testsAttempted >= 2;
+
   return (
     <div className="container-centered py-8">
       <div className="mb-6">
@@ -85,6 +105,18 @@ export function TestSelectionPage() {
           {user?.name ? `Hi ${user.name.split(" ")[0]}. ` : ""}Select JEE Main or MHT-CET and start.
         </p>
       </div>
+
+      {freeLimitReached && (
+        <div className="mb-6">
+          <Alert variant="warning">
+            <div className="font-semibold mb-1">Free Limit Reached</div>
+            <div>You have used all 2 of your free mock tests. Upgrade to Premium to access all tests permanently.</div>
+            <div className="mt-4">
+              <Button variant="primary">Unlock All Tests for ₹299</Button>
+            </div>
+          </Alert>
+        </div>
+      )}
 
       {error ? (
         <Alert variant="error" dismissible onDismiss={() => setError("")} className="mb-6">
@@ -123,21 +155,49 @@ export function TestSelectionPage() {
         </div>
       ) : filtered.length ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map((t) => (
-            <TestCard
-              key={t._id}
-              testId={t._id}
-              title={t.name || "Untitled Test"}
-              examType={normalizeExam(t.exam)}
-              duration={Math.round(Number(t.durationMs || 0) / 60000)}
-              totalQuestions={t.totalQuestions || 0}
-              difficulty={t.difficulty || "Easy"}
-              description={t.description || ""}
-              status={t.status || "available"}
-              onClick={() => setSelectedTest(t)}
-              onStart={() => setSelectedTest(t)}
-            />
-          ))}
+          {filtered.map((t) => {
+            // If free limit reached and not premium, show unlock button
+            const locked = freeLimitReached && !isPremium;
+            return (
+              <Card key={t._id} className="p-5 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <div className="font-semibold text-lg text-secondary-900">{t.name || "Untitled Test"}</div>
+                      <div className="text-sm text-secondary-600">{normalizeExam(t.exam)}</div>
+                    </div>
+                    <span className="badge bg-primary-100 text-primary-700">Available</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 mb-3 py-3 border-t border-b border-secondary-200">
+                    <div>
+                      <div className="text-xs text-secondary-600 font-medium">Duration</div>
+                      <div className="text-sm font-semibold text-secondary-900">{Math.round(Number(t.durationMs || 0) / 60000)} min</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-secondary-600 font-medium">Questions</div>
+                      <div className="text-sm font-semibold text-secondary-900">{t.totalQuestions || 0}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-secondary-600 font-medium">Difficulty</div>
+                      <div className="text-sm font-semibold text-success-700">Easy</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-secondary-600 font-medium">Pattern</div>
+                      <div className="text-sm font-semibold text-secondary-900">MCQ</div>
+                    </div>
+                  </div>
+                  {t.description && <div className="text-sm text-secondary-600 mb-2">{t.description}</div>}
+                </div>
+                <div>
+                  {locked ? (
+                    <Button variant="primary" className="w-full">Unlock for ₹99</Button>
+                  ) : (
+                    <Button variant="primary" className="w-full" onClick={() => setSelectedTest(t)}>Start Test</Button>
+                  )}
+                </div>
+              </Card>
+            );
+          })}
         </div>
       ) : (
         <Card>

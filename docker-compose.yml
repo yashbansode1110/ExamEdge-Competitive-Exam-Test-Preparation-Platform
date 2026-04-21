@@ -23,27 +23,7 @@ services:
     ports:
       - "4000:4000"
 
-  weak-topic:
-    build:
-      context: ./ai-services/weak-topic-service
-      dockerfile: Dockerfile
-    container_name: examedge-weak-topic
-    restart: unless-stopped
-    env_file:
-      - ./ai-services/weak-topic-service/.env
-    ports:
-      - "8001:8000"
 
-  doubt-solver:
-    build:
-      context: ./ai-services/doubt-solver-service
-      dockerfile: Dockerfile
-    container_name: examedge-doubt-solver
-    restart: unless-stopped
-    env_file:
-      - ./ai-services/doubt-solver-service/.env
-    ports:
-      - "8002:8000"
 
 volumes:
   mongo_data:

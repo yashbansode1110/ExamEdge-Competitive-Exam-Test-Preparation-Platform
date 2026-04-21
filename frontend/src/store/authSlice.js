@@ -28,10 +28,21 @@ const slice = createSlice({
       state.refreshToken = "";
       localStorage.removeItem("examedge_access");
       localStorage.removeItem("examedge_refresh");
+    },
+    updatePaymentState(state, action) {
+      if (state.user) {
+        const { isPremium, purchasedTests } = action.payload;
+        if (isPremium !== undefined) {
+          state.user.isPremium = isPremium;
+        }
+        if (purchasedTests !== undefined) {
+          state.user.purchasedTests = purchasedTests;
+        }
+      }
     }
   }
 });
 
-export const { setSession, clearSession } = slice.actions;
+export const { setSession, clearSession, updatePaymentState } = slice.actions;
 export const authReducer = slice.reducer;
 

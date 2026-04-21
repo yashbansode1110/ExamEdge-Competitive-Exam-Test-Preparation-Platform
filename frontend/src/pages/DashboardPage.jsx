@@ -6,6 +6,7 @@ import { Card, CardBody } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { Alert } from "../components/ui/Alert";
 import { TestCard } from "../components/dashboard/TestCard";
+import { PaymentButton } from "../components/ui/PaymentButton";
 import { LandingPage } from "../components/landing/LandingPage.jsx";
 
 function normalizeExam(examValue) {
@@ -20,6 +21,12 @@ export function DashboardPage() {
   const { accessToken, user } = useSelector((s) => s.auth);
   const [tests, setTests] = useState([]);
   const [error, setError] = useState("");
+  const [successPaymentMessage, setSuccessPaymentMessage] = useState("");
+
+  const isPremium = user?.isPremium;
+  const testsAttempted = user?.testsAttempted || 0;
+  const testsRemaining = Math.max(0, 2 - testsAttempted);
+  const isLockedOut = !isPremium && testsAttempted >= 2;
 
   useEffect(() => {
     let cancelled = false;
@@ -59,6 +66,34 @@ export function DashboardPage() {
         </Alert>
       ) : null}
 
+      {successPaymentMessage ? (
+        <Alert variant="success" dismissible onDismiss={() => setSuccessPaymentMessage("")} className="mb-6 bg-green-50 text-green-800 border-green-200">
+          <strong className="font-bold">Success!</strong> {successPaymentMessage}
+        </Alert>
+      ) : null}
+
+      {!isPremium && (
+        <div className={`mb-6 p-4 rounded-xl border ${isLockedOut ? 'bg-red-50 border-red-200' : 'bg-blue-50 border-blue-200'}`}>
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+            <div>
+              <h3 className={`text-lg font-bold ${isLockedOut ? 'text-red-800' : 'text-blue-800'}`}>
+                {isLockedOut ? "Free Limit Reached" : "Free Tier"}
+              </h3>
+              <p className={`text-sm mt-1 ${isLockedOut ? 'text-red-700' : 'text-blue-700'}`}>
+                {isLockedOut 
+                  ? "You have used all 2 of your free mock tests. Upgrade to Premium to access all tests permanently." 
+                  : `You have ${testsRemaining} free test${testsRemaining === 1 ? '' : 's'} remaining before requiring a Premium upgrade.`}
+              </p>
+            </div>
+            {isLockedOut && (
+              <PaymentButton onPaymentSuccess={() => {
+                setSuccessPaymentMessage("Your account has been upgraded to Premium! You now have permanent access to all tests.");
+              }} />
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <Link to="/select-test">
           <Button variant="primary">Choose Test</Button>
@@ -81,7 +116,13 @@ export function DashboardPage() {
               difficulty={t.difficulty || "Easy"}
               description={t.description || ""}
               status={t.status || "available"}
-              onClick={() => nav(`/exam/${t._id}`)}
+              onClick={() => {
+                if (isLockedOut) {
+                  setError("Please upgrade to Premium to start this test.");
+                  return;
+                }
+                nav(`/instructions/${t._id}`);
+              }}
             />
           ))}
         </div>

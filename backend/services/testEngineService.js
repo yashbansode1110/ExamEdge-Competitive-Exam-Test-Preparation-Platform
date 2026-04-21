@@ -218,8 +218,11 @@ export async function autosaveAttempt({ userId, attemptId, sessionId, revision, 
 }
 
 export async function submitAttempt({ userId, attemptId, sessionId, submitIdempotencyKey, responses = [], timeUsed, now = new Date() }) {
+  const uId = new mongoose.Types.ObjectId(userId);
+  const aId = new mongoose.Types.ObjectId(attemptId);
+
   if (!mongoose.isValidObjectId(attemptId)) throw badRequest("Invalid attemptId", "INVALID_ID");
-  const attempt = await TestAttempt.findOne({ _id: attemptId, userId });
+  const attempt = await TestAttempt.findOne({ _id: aId, userId: uId });
   if (!attempt) throw notFound("Attempt not found");
 
   if (attempt.status === "submitted") {
@@ -273,12 +276,21 @@ export async function submitAttempt({ userId, attemptId, sessionId, submitIdempo
     unattemptedCount: scored.unattemptedCount,
     responses: scored.responses,
     sectionStats: scored.sectionStats,
+    subjectStats: scored.sectionStats.reduce((acc, s) => {
+      acc[s.sectionName] = { correct: s.correct, attempted: s.total };
+      return acc;
+    }, {}),
+    totalQuestions: qs.length,
     timeUsed: baseTimeUsed,
     breakdown: {
       correct: scored.correctCount,
       wrong: scored.wrongCount,
       attempted: scored.attemptedCount,
-      bySection: scored.sectionStats
+      bySection: scored.sectionStats,
+      bySubject: scored.sectionStats.reduce((acc, s) => {
+        acc[s.sectionName] = { correct: s.correct, attempted: s.total };
+        return acc;
+      }, {})
     }
   };
 

@@ -1,12 +1,21 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
-export function useExamSecurity({ channelKey, sessionId, onCheat, onNetwork }) {
+export function useExamSecurity({ channelKey, sessionId, onCheat, onNetwork, isSubmittingRef }) {
+  const lastEventRef = useRef({});
+
   useEffect(() => {
-    const pushCheat = (kind, meta) => onCheat?.({ kind, ts: new Date().toISOString(), meta: meta || {} });
+    const pushCheat = (kind, meta) => {
+      const now = Date.now();
+      const last = lastEventRef.current[kind] || 0;
+      if (now - last < 3000) return; // 3 sec throttle
+      lastEventRef.current[kind] = now;
+      onCheat?.({ kind, ts: new Date().toISOString(), meta: meta || {} });
+    };
     const pushNet = (kind, meta) => onNetwork?.({ kind, ts: new Date().toISOString(), meta: meta || {} });
 
     function onContextMenu(e) {
       e.preventDefault();
+      if (window.__EXAM_SUBMITTING__) return;
       pushCheat("RIGHT_CLICK_BLOCKED");
     }
     function onCopy(e) {
@@ -28,7 +37,11 @@ export function useExamSecurity({ channelKey, sessionId, onCheat, onNetwork }) {
       pushCheat("WINDOW_BLUR");
     }
     function onFullscreenChange() {
-      if (!document.fullscreenElement) pushCheat("FULLSCREEN_EXIT");
+      if (!document.fullscreenElement) {
+        if (window.__EXAM_SUBMITTING__ || isSubmittingRef?.current) return;
+        pushCheat("FULLSCREEN_EXIT");
+        document.documentElement.requestFullscreen().catch(() => {});
+      }
     }
     function onSelectStart(e) {
       const tag = (e.target?.tagName || "").toLowerCase();
@@ -38,8 +51,12 @@ export function useExamSecurity({ channelKey, sessionId, onCheat, onNetwork }) {
     }
 
     function onKeyDown(e) {
-      // Block common exam shortcuts that enable copying content.
       const key = (e.key || "").toLowerCase();
+      if (key === "escape") {
+        e.preventDefault();
+      }
+
+      // Block common exam shortcuts that enable copying content.
       const combo = e.ctrlKey || e.metaKey;
       if (!combo) return;
 

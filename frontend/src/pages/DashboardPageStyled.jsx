@@ -169,7 +169,7 @@ export function DashboardPageStyled() {
                 status={test.status || "available"}
                 onClick={() => {
                   if (test.status === "available") {
-                    window.location.href = `/exam/${test.id}`;
+                    window.location.href = `/instructions/${test.id}`;
                   }
                 }}
               />

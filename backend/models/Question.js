@@ -53,7 +53,10 @@ const QuestionSchema = new Schema(
     source: { type: String, default: "manual", enum: ["manual", "ai", "admin-ui", "seedDemo", "bulk-upload", ""] },
     year: { type: Number, default: undefined, index: true },
     isActive: { type: Boolean, default: true, index: true },
-    contentHash: { type: String, required: true, index: true }
+    contentHash: { type: String, required: true, index: true },
+    usageCount: { type: Number, default: 0, index: true },
+    lastUsedAt: { type: Date, default: null, index: true },
+    poolId: { type: String, default: "default", index: true }
   },
   { timestamps: true }
 );

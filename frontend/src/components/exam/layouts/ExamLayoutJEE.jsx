@@ -29,6 +29,7 @@ export function ExamLayoutJEE({
   currentAnswer,
   onAnswer,
   onToggleReview,
+  onSaveAndNext,
   isMarkedForReview,
   onPrevious,
   onNext,
@@ -120,6 +121,7 @@ export function ExamLayoutJEE({
                   onPrevious={onPrevious}
                   onNext={onNext}
                   onMarkForReview={onToggleReview}
+                  onSaveAndNext={onSaveAndNext}
                   isMarkedForReview={isMarkedForReview}
                 />
               }

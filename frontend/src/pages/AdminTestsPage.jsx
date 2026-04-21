@@ -30,6 +30,101 @@ const PRESETS = {
   }
 };
 
+const CHAPTERS = {
+  "MHT-CET": {
+    "11": {
+      Physics: [
+        "Units and Measurements","Mathematical Methods","Motion in a Plane","Laws of Motion","Gravitation",
+        "Mechanical Properties of Solids","Thermal Properties of Matter","Sound","Optics","Electrostatics",
+        "Electric Current Through Conductors","Magnetism","Electromagnetic Waves and Communication System","Semiconductors"
+      ],
+      Chemistry: [
+        "Some Basic Concepts of Chemistry","Introduction to Analytical Chemistry","Some Analytical Techniques","Structure of Atom",
+        "Chemical Bonding","Redox Reactions","Modern Periodic Table","Elements of Group 1 and 2",
+        "Elements of Group 13, 14 and 15","States of Matter","Adsorption and Colloids","Chemical Equilibrium",
+        "Nuclear Chemistry and Radioactivity","Basic Principles of Organic Chemistry","Hydrocarbons","Chemistry in Everyday Life"
+      ],
+      Mathematics: [
+        "Angle and its Measurement","Trigonometry – I","Trigonometry – II","Determinants and Matrices","Straight Line","Circle",
+        "Conic Sections","Measures of Dispersion","Probability","Complex Numbers","Sequences and Series",
+        "Permutations and Combination","Methods of Induction and Binomial Theorem","Sets and Relations",
+        "Functions","Limits","Continuity","Differentiation"
+      ],
+      Biology: [
+        "Living World","Systematics of Living Organisms","Kingdom Plantae","Kingdom Animalia","Cell Structure and Organization",
+        "Biomolecules","Cell Division","Plant Tissues and Anatomy","Morphology of Flowering Plants","Animal Tissue",
+        "Study of Animal Type – Cockroach","Photosynthesis","Respiration and Energy Transfer","Human Nutrition",
+        "Excretion and Osmoregulation","Skeleton and Movement"
+      ]
+    },
+    "12": {
+      Physics: [
+        "Rotational Dynamics","Mechanical Properties of Fluids","Kinetic Theory of Gases and Radiation","Thermodynamics",
+        "Oscillations","Superposition of Waves","Wave Optics","Electrostatics","Current Electricity",
+        "Magnetic Fields due to Electric Current","Magnetic Materials","Electromagnetic Induction","AC Circuits",
+        "Dual Nature of Radiation and Matter","Structure of Atoms and Nuclei","Semiconductor Devices"
+      ],
+      Chemistry: [
+        "Solid State","Solutions","Ionic Equilibria","Chemical Thermodynamics","Electrochemistry","Chemical Kinetics",
+        "Elements of Groups 16, 17 and 18","Transition and Inner Transition Elements","Coordination Compounds",
+        "Halogen Derivatives","Alcohols, Phenols and Ethers","Aldehydes, Ketones and Carboxylic Acids",
+        "Amines","Biomolecules","Introduction to Polymer Chemistry","Green Chemistry and Nanochemistry"
+      ],
+      Mathematics: [
+        "Mathematical Logic","Matrices","Trigonometric Functions","Pair of Straight Lines","Vectors","Line and Plane",
+        "Linear Programming","Differentiation","Applications of Derivatives","Indefinite Integration","Definite Integration",
+        "Application of Definite Integration","Differential Equations","Probability Distributions","Binomial Distribution"
+      ],
+      Biology: [
+        "Reproduction in Lower and Higher Plants","Reproduction in Lower and Higher Animals","Inheritance and Variation",
+        "Molecular Basis of Inheritance","Origin and Evolution of Life","Plant Water Relation",
+        "Plant Growth and Mineral Nutrition","Respiration and Circulation","Control and Co-ordination",
+        "Human Health and Diseases","Enhancement of Food Production","Biotechnology","Organisms and Populations",
+        "Ecosystems and Energy Flow","Biodiversity, Conservation and Environmental Issues"
+      ]
+    }
+  },
+  "JEE Main": {
+    "11": {
+      Physics: [
+        "Units and Measurements","Motion in a Straight Line","Motion in a Plane","Laws of Motion","Work, Energy and Power",
+        "Systems of Particles and Rotational Motion","Gravitation","Mechanical Properties of Solids",
+        "Mechanical Properties of Fluids","Thermal Properties of Matter","Thermodynamics","Kinetic Theory",
+        "Oscillations","Waves"
+      ],
+      Chemistry: [
+        "Some Basic Concepts of Chemistry","Structure of Atom","Classification of Elements and Periodicity in Properties",
+        "Chemical Bonding and Molecular Structure","Thermodynamics","Equilibrium","Redox Reactions",
+        "Organic Chemistry – Some Basic Principles and Techniques","Hydrocarbons"
+      ],
+      Mathematics: [
+        "Sets","Relations and Functions","Trigonometric Functions","Complex Numbers and Quadratic Equations",
+        "Linear Inequalities","Permutations and Combinations","Binomial Theorem","Sequences and Series",
+        "Straight Lines","Conic Sections","Introduction to Three Dimensional Geometry",
+        "Limits and Derivatives","Statistics","Probability"
+      ]
+    },
+    "12": {
+      Physics: [
+        "Electric Charges and Fields","Electrostatic Potential and Capacitance","Current Electricity",
+        "Moving Charges and Magnetism","Magnetism and Matter","Electromagnetic Induction","Alternating Current",
+        "Electromagnetic Waves","Ray Optics and Optical Instruments","Wave Optics",
+        "Dual Nature of Radiation and Matter","Atoms","Nuclei","Semiconductor Electronics"
+      ],
+      Chemistry: [
+        "Solutions","Electrochemistry","Chemical Kinetics","The d- and f-Block Elements","Coordination Compounds",
+        "Haloalkanes and Haloarenes","Alcohols, Phenols and Ethers","Aldehydes, Ketones and Carboxylic Acids",
+        "Amines","Biomolecules"
+      ],
+      Mathematics: [
+        "Relations and Functions","Inverse Trigonometric Functions","Matrices","Determinants",
+        "Continuity and Differentiability","Applications of Derivatives","Integrals","Applications of Integrals",
+        "Differential Equations","Vector Algebra","Three Dimensional Geometry","Linear Programming","Probability"
+      ]
+    }
+  }
+};
+
 function toPrettyJson(value) {
   return JSON.stringify(value, null, 2);
 }
@@ -85,9 +180,20 @@ export function AdminTestsPage() {
   const [filterExam, setFilterExam] = useState("JEE Main (PCM)");
   const [filterTestName, setFilterTestName] = useState("Filtered practice test");
   const [filterSubject, setFilterSubject] = useState("Physics");
-  const [filterChapter, setFilterChapter] = useState("Kinematics");
-  const [filterTopic, setFilterTopic] = useState("");
+  const [filterChapter, setFilterChapter] = useState("");
+  const [classLevel, setClassLevel] = useState("");
+  const [chapters, setChapters] = useState([]);
   const [filterDifficulty, setFilterDifficulty] = useState("");
+
+  useEffect(() => {
+    if (filterExam && classLevel && filterSubject) {
+      const examKey = filterExam.includes("JEE") ? "JEE Main" : "MHT-CET";
+      setChapters(CHAPTERS[examKey]?.[classLevel]?.[filterSubject] || []);
+    } else {
+      setChapters([]);
+    }
+    setFilterChapter("");
+  }, [filterExam, classLevel, filterSubject]);
   const [filterCount, setFilterCount] = useState(10);
   const [filterDurationMinutes, setFilterDurationMinutes] = useState(60);
   const [filterBusy, setFilterBusy] = useState(false);
@@ -193,18 +299,6 @@ export function AdminTestsPage() {
     });
   }
 
-  async function onAutoGenerate() {
-    setError("");
-    setSuccess("");
-    setBusy(true);
-    try {
-      syncSectionsJson(subjectCounts, durationMinutes);
-      setSuccess("Preset applied and sections generated.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function onSubmit(e) {
     e.preventDefault();
     setError("");
@@ -245,6 +339,10 @@ export function AdminTestsPage() {
 
   async function onSubmitFilterTest(e) {
     e.preventDefault();
+    if (!classLevel || !filterChapter) {
+      alert("Please select class and chapter");
+      return;
+    }
     setError("");
     setSuccess("");
     setFilterBusy(true);
@@ -252,9 +350,7 @@ export function AdminTestsPage() {
       if (!accessToken) throw new Error("Not authenticated");
       if (!String(user?.role || "").toLowerCase().includes("admin")) throw new Error("Admin access required");
       const count = Math.max(1, Number(filterCount || 1));
-      const sectionName = filterTopic.trim()
-        ? `${filterSubject} — ${filterChapter} / ${filterTopic}`
-        : `${filterSubject} — ${filterChapter || "All chapters"}`;
+      const sectionName = `${filterSubject} — ${filterChapter}`;
       const section = {
         sectionId: "S1_FILTER",
         name: sectionName,
@@ -264,8 +360,8 @@ export function AdminTestsPage() {
         questionCountBySubject: { [filterSubject]: count },
         allowedQuestionTypes: ["MCQ"],
         hardWindowEnforced: true,
+        classLevel,
         chapter: filterChapter.trim(),
-        topic: filterTopic.trim(),
         ...(filterDifficulty !== "" && filterDifficulty != null
           ? { difficulty: Math.min(5, Math.max(1, Number(filterDifficulty))) }
           : {})
@@ -288,7 +384,11 @@ export function AdminTestsPage() {
       const d = await apiFetch("/tests", { token: accessToken });
       setTests(d.items || []);
     } catch (err) {
-      setError(err.message || "Failed to create filtered test");
+      if (err.message && (err.message.includes("INSUFFICIENT_QUESTIONS") || err.message.includes("Not enough questions"))) {
+        setError("Not enough questions available for this topic");
+      } else {
+        setError(err.message || "Failed to create filtered test");
+      }
     } finally {
       setFilterBusy(false);
     }
@@ -321,19 +421,18 @@ export function AdminTestsPage() {
       {error ? <Alert variant="error" dismissible onDismiss={() => setError("")}>{error}</Alert> : null}
       {success ? <Alert variant="success" dismissible onDismiss={() => setSuccess("")}>{success}</Alert> : null}
 
-      <Card>
-        <CardBody className="p-6">
-          <h2 className="text-xl font-bold text-secondary-900 mb-1">Create Test</h2>
+      <div className="bg-white rounded-2xl shadow-sm border border-secondary-100 p-8 mb-6">
+          <h2 className="text-2xl font-bold text-secondary-900 mb-2">Test Configuration</h2>
           <p className="text-sm text-secondary-600 mb-4">Choose a preset, adjust question counts, and create test.</p>
 
           <form onSubmit={onSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <label className="block text-sm font-medium text-secondary-900">
                 Exam Preset
                 <select
                   value={preset}
                   onChange={(e) => applyPreset(e.target.value)}
-                  className="w-full mt-1"
+                  className="block w-full mt-2 rounded-lg border-secondary-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-3 border"
                 >
                   <option value="JEE_PCM">JEE Main (PCM)</option>
                   <option value="MHT_CET_PCM">MHT-CET (PCM)</option>
@@ -343,11 +442,11 @@ export function AdminTestsPage() {
               </label>
               <label className="block text-sm font-medium text-secondary-900">
                 Test Name
-                <input value={name} onChange={(e) => setName(e.target.value)} className="w-full mt-1" required />
+                <input value={name} onChange={(e) => setName(e.target.value)} className="block w-full mt-2 rounded-lg border-secondary-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-3 border" required />
               </label>
               <label className="block text-sm font-medium text-secondary-900">
                 Exam Label
-                <input value={exam} onChange={(e) => setExam(e.target.value)} className="w-full mt-1" required />
+                <input value={exam} onChange={(e) => setExam(e.target.value)} className="block w-full mt-2 rounded-lg border-secondary-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-3 border" required />
               </label>
               <label className="block text-sm font-medium text-secondary-900">
                 Total Duration (minutes)
@@ -360,7 +459,7 @@ export function AdminTestsPage() {
                     setDurationMinutes(next);
                     syncSectionsJson(subjectCounts, next);
                   }}
-                  className="w-full mt-1"
+                  className="block w-full mt-2 rounded-lg border-secondary-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-3 border"
                   required
                 />
               </label>
@@ -377,15 +476,15 @@ export function AdminTestsPage() {
               </span>
             </label>
 
-            <div className="rounded-lg border border-secondary-200 p-4 space-y-3">
+            <div className="bg-white rounded-xl shadow-sm border border-secondary-200 p-6 space-y-4 my-6">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-sm font-semibold text-secondary-900">Subjects</div>
-                  <div className="text-xs text-secondary-600">Edit question counts directly.</div>
+                  <div className="text-xl font-bold text-secondary-900">Subject Distribution</div>
+                  <div className="text-sm text-secondary-600">Edit question counts directly.</div>
                 </div>
                 <div className="text-xs text-secondary-600">Total Questions: <span className="font-semibold text-secondary-900">{computedQuestionCount}</span></div>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {subjectList.map((subject) => (
                   <SubjectCard
                     key={subject}
@@ -399,28 +498,31 @@ export function AdminTestsPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <label className="block text-sm font-medium text-secondary-900">
-                Marking Mode
-                <select value={markMode} onChange={(e) => setMarkMode(e.target.value)} className="w-full mt-1">
-                  <option value="UNIFORM_NEGATIVE">UNIFORM_NEGATIVE</option>
-                  <option value="SUBJECT_WEIGHTS">SUBJECT_WEIGHTS</option>
-                  <option value="CUSTOM">CUSTOM</option>
-                </select>
-              </label>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="bg-white rounded-xl shadow-sm border border-secondary-200 p-6 space-y-4 my-6">
+              <div className="text-xl font-bold text-secondary-900 mb-4">Marking Scheme</div>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <label className="block text-sm font-medium text-secondary-900">
-                  Correct
-                  <input type="number" value={correct} onChange={(e) => setCorrect(Number(e.target.value))} className="w-full mt-1" />
+                  Marking Mode
+                  <select value={markMode} onChange={(e) => setMarkMode(e.target.value)} className="block w-full mt-2 rounded-lg border-secondary-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-3 border">
+                    <option value="UNIFORM_NEGATIVE">UNIFORM_NEGATIVE</option>
+                    <option value="SUBJECT_WEIGHTS">SUBJECT_WEIGHTS</option>
+                    <option value="CUSTOM">CUSTOM</option>
+                  </select>
                 </label>
-                <label className="block text-sm font-medium text-secondary-900">
-                  Wrong
-                  <input type="number" value={wrong} onChange={(e) => setWrong(Number(e.target.value))} className="w-full mt-1" />
-                </label>
-                <label className="block text-sm font-medium text-secondary-900">
-                  Unanswered
-                  <input type="number" value={unanswered} onChange={(e) => setUnanswered(Number(e.target.value))} className="w-full mt-1" />
-                </label>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:col-span-2">
+                  <label className="block text-sm font-medium text-secondary-900">
+                    Correct
+                    <input type="number" value={correct} onChange={(e) => setCorrect(Number(e.target.value))} className="block w-full mt-2 rounded-lg border-secondary-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-3 border" />
+                  </label>
+                  <label className="block text-sm font-medium text-secondary-900">
+                    Wrong
+                    <input type="number" value={wrong} onChange={(e) => setWrong(Number(e.target.value))} className="block w-full mt-2 rounded-lg border-secondary-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-3 border" />
+                  </label>
+                  <label className="block text-sm font-medium text-secondary-900">
+                    Unanswered
+                    <input type="number" value={unanswered} onChange={(e) => setUnanswered(Number(e.target.value))} className="block w-full mt-2 rounded-lg border-secondary-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-3 border" />
+                  </label>
+                </div>
               </div>
             </div>
 
@@ -438,45 +540,23 @@ export function AdminTestsPage() {
             </details>
 
             <div className="pt-2 flex items-center gap-3 flex-wrap">
-              <Button type="button" variant="outline" disabled={busy} onClick={onAutoGenerate}>
-                Auto Generate Test
-              </Button>
               <Button type="submit" variant="primary" disabled={busy} isLoading={busy}>
                 {busy ? "Creating..." : "Create Test"}
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={busy}
-                onClick={async () => {
-                  setError("");
-                  setSuccess("");
-                  try {
-                    const d = await apiFetch("/tests", { token: accessToken });
-                    setTests(d.items || []);
-                  } catch (e) {
-                    setError(e.message || "Failed to refresh tests");
-                  }
-                }}
-              >
-                Refresh tests
-              </Button>
             </div>
           </form>
-        </CardBody>
-      </Card>
+        </div>
 
-      <Card>
-        <CardBody className="p-6">
-          <h2 className="text-xl font-bold text-secondary-900 mb-1">Smart filter test</h2>
+      <div className="bg-white rounded-2xl shadow-sm border border-secondary-100 p-8 mb-6">
+          <h2 className="text-2xl font-bold text-secondary-900 mb-2">Smart Filter Test Generator</h2>
           <p className="text-sm text-secondary-600 mb-4">
-            Build a single-section test from subject, chapter, optional topic, optional difficulty, and question count (e.g. Physics → Kinematics → Medium → 10).
+            Build a single-section test from subject, chapter, optional difficulty, and question count (e.g. Physics → Kinematics → Medium → 10).
           </p>
           <form onSubmit={onSubmitFilterTest} className="space-y-3">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <label className="block text-sm font-medium text-secondary-900">
                 Exam
-                <select value={filterExam} onChange={(e) => setFilterExam(e.target.value)} className="w-full mt-1" required>
+                <select value={filterExam} onChange={(e) => setFilterExam(e.target.value)} className="block w-full mt-2 rounded-lg border-secondary-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-3 border" required>
                   <option value="JEE Main (PCM)">JEE Main (PCM)</option>
                   <option value="MHT-CET (PCM)">MHT-CET (PCM)</option>
                   <option value="MHT-CET (PCB)">MHT-CET (PCB)</option>
@@ -484,14 +564,14 @@ export function AdminTestsPage() {
               </label>
               <label className="block text-sm font-medium text-secondary-900">
                 Test name
-                <input value={filterTestName} onChange={(e) => setFilterTestName(e.target.value)} className="w-full mt-1" required />
+                <input value={filterTestName} onChange={(e) => setFilterTestName(e.target.value)} className="block w-full mt-2 rounded-lg border-secondary-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-3 border" required />
               </label>
               <label className="block text-sm font-medium text-secondary-900">
                 Subject
                 <select
                   value={filterSubject}
                   onChange={(e) => setFilterSubject(e.target.value)}
-                  className="w-full mt-1"
+                  className="block w-full mt-2 rounded-lg border-secondary-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-3 border"
                   required
                 >
                   {filterSubjectOptions.map((s) => (
@@ -502,19 +582,28 @@ export function AdminTestsPage() {
                 </select>
               </label>
               <label className="block text-sm font-medium text-secondary-900">
-                Chapter (exact match)
-                <input value={filterChapter} onChange={(e) => setFilterChapter(e.target.value)} className="w-full mt-1" required />
+                Class
+                <select value={classLevel} onChange={(e) => setClassLevel(e.target.value)} className="block w-full mt-2 rounded-lg border-secondary-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-3 border" required>
+                  <option value="">Select Class</option>
+                  <option value="11">11th</option>
+                  <option value="12">12th</option>
+                </select>
               </label>
               <label className="block text-sm font-medium text-secondary-900">
-                Topic (optional, exact match)
-                <input value={filterTopic} onChange={(e) => setFilterTopic(e.target.value)} className="w-full mt-1" placeholder="Leave empty to ignore" />
+                Chapter
+                <select value={filterChapter} onChange={(e) => setFilterChapter(e.target.value)} className="block w-full mt-2 rounded-lg border-secondary-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-3 border" required>
+                  <option value="">Select Chapter</option>
+                  {chapters.map((ch, i) => (
+                    <option key={i} value={ch}>{ch}</option>
+                  ))}
+                </select>
               </label>
               <label className="block text-sm font-medium text-secondary-900">
                 Difficulty (optional)
                 <select
                   value={filterDifficulty}
                   onChange={(e) => setFilterDifficulty(e.target.value)}
-                  className="w-full mt-1"
+                  className="block w-full mt-2 rounded-lg border-secondary-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-3 border"
                 >
                   <option value="">Any</option>
                   <option value="1">1</option>
@@ -532,7 +621,7 @@ export function AdminTestsPage() {
                   max={200}
                   value={filterCount}
                   onChange={(e) => setFilterCount(Number(e.target.value))}
-                  className="w-full mt-1"
+                  className="block w-full mt-2 rounded-lg border-secondary-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-3 border"
                   required
                 />
               </label>
@@ -543,7 +632,7 @@ export function AdminTestsPage() {
                   min={1}
                   value={filterDurationMinutes}
                   onChange={(e) => setFilterDurationMinutes(Number(e.target.value))}
-                  className="w-full mt-1"
+                  className="block w-full mt-2 rounded-lg border-secondary-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-3 border"
                   required
                 />
               </label>
@@ -552,16 +641,14 @@ export function AdminTestsPage() {
               {filterBusy ? "Creating…" : "Generate test from filters"}
             </Button>
           </form>
-        </CardBody>
-      </Card>
+        </div>
 
-      <Card>
-        <CardBody className="p-6">
+      <div className="bg-white rounded-2xl shadow-sm border border-secondary-100 p-8 mb-6">
           <h3 className="text-lg font-bold text-secondary-900 mb-2">Existing Tests</h3>
           {tests.length ? (
             <div className="space-y-2">
               {tests.map((t) => (
-                <div key={t._id} className="flex items-center justify-between gap-3 rounded-md border border-secondary-200 p-3">
+                <div key={t._id} className="flex items-center justify-between gap-4 rounded-xl border border-secondary-200 p-5 bg-secondary-50 hover:bg-white hover:shadow-md transition-all">
                   <div>
                     <div className="font-semibold text-secondary-900">{t.name}</div>
                     <div className="text-xs text-secondary-600">{t.exam} • {t.totalQuestions} questions • {Math.round(Number(t.durationMs || 0) / 60000)} min</div>
@@ -578,8 +665,7 @@ export function AdminTestsPage() {
           ) : (
             <div className="text-sm text-secondary-600">No tests found. Create one above.</div>
           )}
-        </CardBody>
-      </Card>
+        </div>
     </div>
   );
 }
