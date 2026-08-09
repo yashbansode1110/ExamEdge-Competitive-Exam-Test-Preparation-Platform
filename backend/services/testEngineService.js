@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { Test } from "../models/Test.js";
 import { TestAttempt } from "../models/TestAttempt.js";
 import { Question } from "../models/Question.js";
+import { User } from "../models/User.js";
 import { badRequest, forbidden, notFound } from "../middleware/errorHandler.js";
 import { evaluateTestAttempt } from "./evaluationService.js";
 
@@ -131,6 +132,19 @@ export async function startTest({ userId, testId, sessionId, deviceId = "" }) {
     }
     return { test, attempt: existing.toObject(), resumed: true };
   }
+
+  const user = await User.findById(userId);
+  if (!user) throw notFound("User not found");
+
+  const hasPurchase = user.purchasedTests && user.purchasedTests.some(id => id.toString() === testId.toString());
+  const isFree = (user.testsAttempted || 0) < 2;
+
+  if (!user.isPremium && !hasPurchase && !isFree) {
+    throw forbidden("Payment required", "PAYMENT_REQUIRED");
+  }
+
+  user.testsAttempted = (user.testsAttempted || 0) + 1;
+  await user.save();
 
   const questionIds = await pickQuestionsForTest(test);
   const startedAt = new Date();

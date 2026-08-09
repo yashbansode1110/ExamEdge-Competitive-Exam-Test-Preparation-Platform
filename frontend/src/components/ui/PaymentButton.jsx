@@ -1,9 +1,16 @@
 import React, { useState } from "react";
+import toast from "react-hot-toast";
 import { Button } from "./Button";
 import { apiFetch } from "../../services/api";
 import { useSelector, useDispatch } from "react-redux";
 import { updatePaymentState } from "../../store/authSlice";
 import { Alert } from "./Alert";
+import {
+  buildRazorpayCheckoutOptions,
+  logRazorpayFailure,
+  razorpayFailureMessage,
+  resolveRazorpayPublicKey
+} from "../../utils/razorpayCheckout.js";
 
 export function PaymentButton({ type = "full", testId = null, onPaymentSuccess, text, className, variant = "primary" }) {
   const { accessToken, user } = useSelector((s) => s.auth);
@@ -22,18 +29,46 @@ export function PaymentButton({ type = "full", testId = null, onPaymentSuccess, 
         body: { type, testId }
       });
 
-      if (!orderData || !orderData.order) {
-        throw new Error("Failed to create order");
+      // eslint-disable-next-line no-console
+      console.log("[Razorpay] Order response:", orderData);
+
+      if (!orderData?.success || !orderData?.order?.id) {
+        throw new Error(orderData?.message || "Failed to create order or missing order_id");
       }
 
-      const options = {
-        key: import.meta.env.VITE_RAZORPAY_KEY_ID || "rzp_test_YourKeyId",
-        amount: orderData.order.amount,
-        currency: orderData.order.currency,
+      let keyData = null;
+      if (!orderData.key && !orderData.key_id) {
+        keyData = await apiFetch("/api/payment/get-key", { token: accessToken });
+        if (!keyData.success || !keyData.key) throw new Error("Could not retrieve payment keys");
+      } else {
+        keyData = { key: orderData.key || orderData.key_id, mode: orderData.mode };
+      }
+
+      if (keyData.mode === "live" && import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
+        console.warn("[Razorpay] Live key in dev — use rzp_test_* keys for local test payments.");
+        toast("Using a live Razorpay key in development. Prefer rzp_test_* keys.", { icon: "⚠️" });
+      }
+
+      const publicKey = resolveRazorpayPublicKey(orderData, keyData);
+      if (!publicKey) throw new Error("Missing Razorpay public key");
+
+      const description = type === "full" ? "Unlock All Premium Tests" : "Unlock Single Test";
+
+      const options = buildRazorpayCheckoutOptions({
+        key: publicKey,
+        order: orderData.order,
         name: "ExamEdge",
-        description: type === "full" ? "Unlock All Premium Tests" : "Unlock Single Test",
-        order_id: orderData.order.id,
+        description,
+        user,
+        onDismiss: () => {
+          // eslint-disable-next-line no-console
+          console.log("[Razorpay] Checkout closed");
+          toast("Checkout closed", { icon: "ℹ️" });
+        },
         handler: async function (response) {
+          // eslint-disable-next-line no-console
+          console.log("[Razorpay] Payment success:", response);
           try {
             const verifyData = await apiFetch("/api/payment/verify-payment", {
               method: "POST",
@@ -48,39 +83,51 @@ export function PaymentButton({ type = "full", testId = null, onPaymentSuccess, 
             });
 
             if (verifyData.success || verifyData.ok) {
-              dispatch(updatePaymentState({ 
-                isPremium: verifyData.isPremium, 
-                purchasedTests: verifyData.purchasedTests 
-              }));
-              
+              dispatch(
+                updatePaymentState({
+                  isPremium: verifyData.isPremium,
+                  purchasedTests: verifyData.purchasedTests
+                })
+              );
+              toast.success("Payment successful! Your access is updated.");
               if (onPaymentSuccess) {
                 onPaymentSuccess();
               }
             } else {
-              setError("Payment verification failed. Security mismatch.");
+              const msg = "Payment verification failed. Security mismatch.";
+              toast.error(msg);
+              setError(msg);
             }
           } catch (err) {
-            console.error("Verification error:", err);
-            setError(err.message || "Payment verification failed");
+            // eslint-disable-next-line no-console
+            console.error("[Razorpay] Verification error:", err);
+            const msg = err.message || "Payment verification failed";
+            toast.error(msg);
+            setError(msg);
           }
-        },
-        prefill: {
-          name: user?.name,
-          email: user?.email
-        },
-        theme: {
-          color: type === "full" ? "#3b82f6" : "#f59e0b"
         }
-      };
+      });
+
+      // eslint-disable-next-line no-console
+      console.log("[Razorpay] Checkout options:", {
+        ...options,
+        key: options.key ? `${String(options.key).slice(0, 10)}…` : ""
+      });
 
       const rzp = new window.Razorpay(options);
       rzp.on("payment.failed", function (response) {
-        console.error("Payment Failed:", response.error);
-        setError(response.error.description || "Payment failed");
+        logRazorpayFailure("PaymentButton", response);
+        const msg = razorpayFailureMessage(response);
+        toast.error(msg);
+        setError(msg);
       });
       rzp.open();
     } catch (err) {
-      setError(err.message || "Error initiating payment");
+      // eslint-disable-next-line no-console
+      console.error("[Razorpay] handlePayment error:", err);
+      const msg = err.message || "Error initiating payment";
+      toast.error(msg);
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -89,20 +136,30 @@ export function PaymentButton({ type = "full", testId = null, onPaymentSuccess, 
   const defaultText = type === "full" ? "Unlock All Tests for ₹299" : "Unlock for ₹99";
 
   return (
-    <div className={`flex flex-col items-center ${className || 'w-full'}`}>
+    <div className={`flex flex-col items-center ${className || "w-full"}`}>
       {error && (
         <Alert variant="error" className="mb-4" dismissible onDismiss={() => setError("")}>
           {error}
         </Alert>
       )}
-      <Button 
-        variant={variant} 
-        onClick={(e) => { e.stopPropagation(); handlePayment(); }} 
+      <Button
+        variant={variant}
+        onClick={(e) => {
+          e.stopPropagation();
+          handlePayment();
+        }}
         disabled={loading}
         className={type === "full" ? "w-full sm:w-auto px-8 py-3 text-lg font-bold shadow-xl hover:shadow-2xl transition-all" : "w-full"}
       >
-        {loading ? "Processing..." : (text || defaultText)}
+        {loading ? "Processing..." : text || defaultText}
       </Button>
+      {import.meta.env.DEV ? (
+        <p className="mt-2 max-w-md text-center text-xs text-secondary-500">
+          Test mode: UPI <span className="font-mono font-semibold">success@razorpay</span>. Use the same{" "}
+          <span className="font-mono">rzp_test_*</span> account in backend <span className="font-mono">.env</span> and
+          optional <span className="font-mono">VITE_RAZORPAY_KEY</span>.
+        </p>
+      ) : null}
     </div>
   );
 }

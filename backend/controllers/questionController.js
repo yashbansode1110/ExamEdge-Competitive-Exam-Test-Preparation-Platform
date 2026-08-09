@@ -106,7 +106,7 @@ function examMatchFilter(exam) {
 function subjectMatchFilter(subject) {
   const raw = String(subject || "").trim();
   const key = raw.toLowerCase();
-  if (key === "mathematics" || key === "math") return /^(mathematics|math)$/i;
+  if (key === "mathematics" || key === "math" || key === "maths") return /^(mathematics|math|maths)$/i;
   return { $regex: `^${raw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" };
 }
 
@@ -123,6 +123,7 @@ export async function listQuestions(req, res, next) {
         subject: z.string().optional(),
         chapter: z.string().optional(),
         difficulty: z.coerce.number().int().min(1).max(5).optional(),
+        unusedOnly: z.coerce.boolean().optional(),
         page: z.coerce.number().int().min(1).default(1),
         limit: z.coerce.number().int().min(1).max(100).default(20)
       })
@@ -133,6 +134,7 @@ export async function listQuestions(req, res, next) {
     if (q.subject) filter.subject = subjectMatchFilter(q.subject);
     if (q.chapter) filter.chapter = chapterMatchFilter(q.chapter);
     if (q.difficulty) filter.difficulty = q.difficulty;
+    if (q.unusedOnly) filter.usageCount = 0;
 
     const skip = (q.page - 1) * q.limit;
     const [items, total] = await Promise.all([

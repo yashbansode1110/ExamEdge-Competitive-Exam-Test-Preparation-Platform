@@ -1,8 +1,9 @@
+import "dotenv/config";
 import Groq from "groq-sdk";
 
 let ai = null;
 
-export async function generateAIAnalysis(data) {
+async function generateAIAnalysis(data) {
   if (!process.env.GROQ_API_KEY) {
     throw new Error("Missing GROQ_API_KEY");
   }
@@ -57,13 +58,6 @@ Generate a JSON object with the following keys:
 
 Keep response concise and student-friendly. Return ONLY valid JSON, wrapped in \`\`\`json if necessary.`;
 
-  const fallbackJson = {
-    strengths: ["Revise fundamentals"],
-    weaknesses: ["Accuracy improvement needed"],
-    recommendations: ["Practice more questions", "Review incorrect answers"],
-    summary: "AI analysis temporarily unavailable"
-  };
-
   let attempts = 0;
   const maxAttempts = 2; // Try once, retry once
 
@@ -88,22 +82,12 @@ Keep response concise and student-friendly. Return ONLY valid JSON, wrapped in \
       }
 
       const parsed = JSON.parse(match[0]);
-      return enrichAnalysis(parsed, data);
+      return parsed;
     } catch (err) {
       console.error(`AI Analysis Attempt ${attempts + 1} failed:`, err.message || err);
       attempts++;
     }
   }
-
-  console.warn("Returning fallback JSON due to repeated AI failures.");
-  return enrichAnalysis(fallbackJson, data);
 }
 
-function enrichAnalysis(parsed, data) {
-  return {
-    ...parsed,
-    predictedPerformance: data.predictedPerformance || parsed.predictedPerformance || "Not enough data to predict yet.",
-    confidenceLevel: data.confidenceLevel || parsed.confidenceLevel || "N/A",
-    timeManagement: data.timeManagement?.summary || parsed.timeManagement || "N/A"
-  };
-}
+generateAIAnalysis({}).then(console.log);

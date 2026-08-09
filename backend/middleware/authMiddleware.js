@@ -10,10 +10,10 @@ export function authMiddleware() {
       if (!token) throw unauthorized("Missing access token");
 
       const payload = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
-      const user = await User.findById(payload.sub).select("_id email name role banned isPremium testsAttempted");
+      const user = await User.findById(payload.sub).select("_id email name role banned isPremium testsAttempted purchasedTests");
       if (!user) throw unauthorized("User not found");
       if (user.banned) throw forbidden("User is banned", "BANNED");
-      req.user = { id: user._id.toString(), email: user.email, name: user.name, role: user.role, isPremium: user.isPremium, testsAttempted: user.testsAttempted };
+      req.user = { id: user._id.toString(), email: user.email, name: user.name, role: user.role, isPremium: user.isPremium, testsAttempted: user.testsAttempted, purchasedTests: user.purchasedTests };
       next();
     } catch {
       next(unauthorized("Invalid access token"));

@@ -10,7 +10,7 @@ import { errorHandler } from "./middleware/errorHandler.js";
 import { authRoutes } from "./routes/authRoutes.js";
 import { questionRoutes } from "./routes/questionRoutes.js";
 import { testRoutes } from "./routes/testRoutes.js";
-import { analyticsRoutes } from "./routes/analyticsRoutes.js";
+import { analyticsApiRoutes, analyticsShallowRoutes } from "./routes/analyticsRoutes.js";
 import { aiRoute } from "./routes/aiRoute.js";
 import { adminTestRoutes } from "./routes/adminTestRoutes.js";
 import { adminCheatingRoutes, cheatingRoutes } from "./routes/cheatingRoutes.js";
@@ -45,7 +45,7 @@ app.use("/auth", authRoutes);
 app.use("/questions", questionRoutes);
 app.use("/admin/questions", adminQuestionRoutes);
 app.use("/tests", testRoutes);
-app.use("/analytics", analyticsRoutes);
+app.use("/analytics", analyticsShallowRoutes);
 app.use("/ai", aiRoute);
 
 // Also expose under /api for compatibility
@@ -54,7 +54,8 @@ app.use("/api/questions", questionRoutes);
 app.use("/api/admin/questions", adminQuestionRoutes);
 app.use("/api/tests", testRoutes);
 app.use("/api/test-sessions", testSessionRoutes);
-app.use("/api/analytics", analyticsRoutes);
+app.use("/api", analyticsApiRoutes);
+app.use("/api/analytics", analyticsShallowRoutes);
 app.use("/api/cheating", cheatingRoutes);
 app.use("/api/payment", paymentRoutes);
 app.use("/api/ai", aiRoute);

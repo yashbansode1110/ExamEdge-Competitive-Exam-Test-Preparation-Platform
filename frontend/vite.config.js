@@ -74,6 +74,8 @@ export default defineConfig(({ mode }) => {
         "/api": { target: backendTarget, changeOrigin: true },
         "/auth": { target: backendTarget, changeOrigin: true },
         "/tests": { target: backendTarget, changeOrigin: true },
+        "/analytics": { target: backendTarget, changeOrigin: true },
+        "/ai": { target: backendTarget, changeOrigin: true },
       },
     },
   };

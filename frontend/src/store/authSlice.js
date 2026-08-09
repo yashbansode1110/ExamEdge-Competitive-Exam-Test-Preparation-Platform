@@ -12,7 +12,13 @@ const slice = createSlice({
   reducers: {
     setSession(state, action) {
       const { user, accessToken, refreshToken } = action.payload;
-      state.user = user || null;
+      if (user) {
+        state.user = { ...(state.user || {}), ...user };
+        if (state.user._id && !state.user.id) state.user.id = String(state.user._id);
+        if (state.user.id && !state.user._id) state.user._id = state.user.id;
+      } else if (user === null) {
+        state.user = null;
+      }
       if (accessToken) {
         state.accessToken = accessToken;
         localStorage.setItem("examedge_access", accessToken);
@@ -31,12 +37,15 @@ const slice = createSlice({
     },
     updatePaymentState(state, action) {
       if (state.user) {
-        const { isPremium, purchasedTests } = action.payload;
+        const { isPremium, purchasedTests, testsAttempted } = action.payload;
         if (isPremium !== undefined) {
           state.user.isPremium = isPremium;
         }
         if (purchasedTests !== undefined) {
           state.user.purchasedTests = purchasedTests;
+        }
+        if (testsAttempted !== undefined) {
+          state.user.testsAttempted = testsAttempted;
         }
       }
     }

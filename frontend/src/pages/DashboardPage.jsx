@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { apiFetch } from "../services/api.js";
+import { normalizeTestsListResponse } from "../utils/testsApi.js";
 import { Card, CardBody } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { Alert } from "../components/ui/Alert";
@@ -33,8 +34,8 @@ export function DashboardPage() {
     async function load() {
       if (!accessToken) return;
       try {
-        const data = await apiFetch("/tests", { token: accessToken });
-        if (!cancelled) setTests(data.items || []);
+        const data = await apiFetch("/api/tests", { token: accessToken });
+        if (!cancelled) setTests(normalizeTestsListResponse(data));
       } catch (e) {
         if (!cancelled) setError(e.message);
       }
@@ -117,11 +118,10 @@ export function DashboardPage() {
               description={t.description || ""}
               status={t.status || "available"}
               onClick={() => {
-                if (isLockedOut) {
-                  setError("Please upgrade to Premium to start this test.");
-                  return;
-                }
-                nav(`/instructions/${t._id}`);
+                window.alert("You have to click 'Choose Test' to select the test.");
+              }}
+              onStart={() => {
+                window.alert("You have to click 'Choose Test' to select the test.");
               }}
             />
           ))}

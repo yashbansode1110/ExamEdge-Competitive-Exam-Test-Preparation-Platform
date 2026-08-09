@@ -228,6 +228,7 @@ export function ExamInterfacePage() {
         }
       });
       alert(`Submitted. Score: ${data.result.score} | Accuracy: ${(data.result.accuracy * 100).toFixed(1)}%`);
+      window.dispatchEvent(new CustomEvent("examedge-analytics-refresh"));
       nav("/analytics");
     } catch (e) {
       setError(e.message);

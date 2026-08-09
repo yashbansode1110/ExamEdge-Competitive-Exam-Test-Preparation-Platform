@@ -17,6 +17,7 @@
     "react": "latest",
     "react-chartjs-2": "latest",
     "react-dom": "latest",
+    "react-hot-toast": "^2.6.0",
     "react-katex": "latest",
     "react-redux": "latest",
     "react-router-dom": "latest",

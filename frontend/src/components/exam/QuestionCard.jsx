@@ -48,21 +48,6 @@ export function QuestionCard({
     const isMCQ = q?.type === "MCQ";
     const isNumerical = q?.type === "NUMERICAL";
 
-    const difficultyBadge =
-      difficulty || q?.difficulty ? (
-        <span
-          className={`px-2 py-1 rounded text-xs font-semibold ${
-            (difficulty || q.difficulty) === "Easy"
-              ? "bg-success-100 text-success-700"
-              : (difficulty || q.difficulty) === "Medium"
-                ? "bg-warning-100 text-warning-700"
-                : "bg-error-100 text-error-700"
-          }`}
-        >
-          {difficulty || q.difficulty}
-        </span>
-      ) : null;
-
     const selectedOptionKey = a?.selectedOptionKey;
 
     if (variant === "mhtcet") {
@@ -150,7 +135,6 @@ export function QuestionCard({
                 </div>
               )}
             </div>
-            {difficultyBadge}
           </div>
         </div>
 

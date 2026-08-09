@@ -86,13 +86,13 @@ function aggregateSubjectQuestionCounts(sections) {
 function normalizeSubjectKey(subject) {
   const raw = String(subject || "").trim();
   const key = raw.toLowerCase();
-  if (key === "math" || key === "mathematics") return "mathematics";
+  if (key === "math" || key === "mathematics" || key === "maths") return "mathematics";
   return key;
 }
 
 function subjectRegex(subject) {
   const key = normalizeSubjectKey(subject);
-  if (key === "mathematics") return /^(mathematics|math)$/i;
+  if (key === "mathematics") return /^(mathematics|math|maths)$/i;
   return new RegExp(`^${String(subject || "").trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i");
 }
 

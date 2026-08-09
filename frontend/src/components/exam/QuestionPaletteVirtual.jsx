@@ -3,7 +3,7 @@ import { QuestionPaletteButton } from "./QuestionPaletteButton.jsx";
 
 const ITEM = 40; // px (matches .question-btn w-10/h-10)
 const GAP = 8;
-const COLS = 6; // NTA-ish grid density
+const COLS = 5; // NTA-ish grid density
 
 export function QuestionPaletteVirtual({
   indexes = [],
@@ -39,7 +39,7 @@ export function QuestionPaletteVirtual({
       ref={scrollerRef}
       onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
       className="w-full"
-      style={{ height, overflow: "auto" }}
+      style={{ height, overflowX: "hidden", overflowY: "auto" }}
     >
       <div style={{ height: totalHeight, position: "relative" }}>
         {visible.map((v) => {

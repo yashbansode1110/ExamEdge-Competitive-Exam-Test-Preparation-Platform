@@ -9,7 +9,7 @@ import { SubjectCard } from "../components/admin/SubjectCard.jsx";
 const PRESETS = {
   JEE_PCM: {
     label: "JEE Main (PCM)",
-    exam: "JEE Main (PCM)",
+    exam: "JEE Main",
     durationMinutes: 180,
     subjectCounts: { Physics: 25, Chemistry: 25, Mathematics: 25 },
     marking: { mode: "UNIFORM_NEGATIVE", correct: 4, wrong: 1, unanswered: 0 }
@@ -236,7 +236,7 @@ export function AdminTestsPage() {
       await Promise.all(
         subjects.map(async (subject) => {
           try {
-            const d = await apiFetch(`/api/questions/filter?exam=${encodeURIComponent(exam)}&subject=${encodeURIComponent(subject)}&page=1&limit=1`, {
+            const d = await apiFetch(`/api/questions/filter?exam=${encodeURIComponent(exam)}&subject=${encodeURIComponent(subject)}&unusedOnly=true&page=1&limit=1`, {
               token: accessToken
             });
             out[subject] = Number(d.total || 0);

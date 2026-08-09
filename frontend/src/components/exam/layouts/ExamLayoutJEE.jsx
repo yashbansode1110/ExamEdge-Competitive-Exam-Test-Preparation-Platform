@@ -64,7 +64,7 @@ export function ExamLayoutJEE({
         ) : null}
       </div>
 
-      <div className="grid h-[calc(100vh-140px)] gap-3 p-3 lg:grid-cols-[240px_1fr]">
+      <div className="grid h-[calc(100vh-140px)] gap-3 p-3 lg:grid-cols-[320px_1fr]">
         {/* Left: Question palette */}
         <aside className="question-palette overflow-hidden h-full">
           <div className="px-3 py-3">

@@ -1,11 +1,19 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useSelector } from "react-redux";
+import toast from "react-hot-toast";
+import { useSelector, useDispatch } from "react-redux";
 import { useNavigate, Link } from "react-router-dom";
 import { apiFetch } from "../services/api.js";
+import { updatePaymentState } from "../store/authSlice.js";
+import { normalizeTestsListResponse } from "../utils/testsApi.js";
+import {
+  buildRazorpayCheckoutOptions,
+  logRazorpayFailure,
+  razorpayFailureMessage,
+  resolveRazorpayPublicKey
+} from "../utils/razorpayCheckout.js";
 import { Card, CardBody } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { Alert } from "../components/ui/Alert";
-import { TestCard } from "../components/dashboard/TestCard";
 import { Modal } from "../components/ui/Modal";
 
 function normalizeExam(examValue) {
@@ -17,6 +25,7 @@ function normalizeExam(examValue) {
 
 export function TestSelectionPage() {
   const nav = useNavigate();
+  const dispatch = useDispatch();
   const { accessToken, user } = useSelector((s) => s.auth);
 
   const [tests, setTests] = useState([]);
@@ -25,7 +34,6 @@ export function TestSelectionPage() {
   const [filter, setFilter] = useState("all"); // all | JEE Main | MHT-CET
   const [selectedTest, setSelectedTest] = useState(null);
   const [startBusy, setStartBusy] = useState(false);
-  // Track premium and test limit
   const [isPremium, setIsPremium] = useState(false);
   const [testsAttempted, setTestsAttempted] = useState(0);
 
@@ -35,45 +43,81 @@ export function TestSelectionPage() {
     [pageSessionKey]
   );
 
+  /**
+   * IMPORTANT: depend only on `accessToken` (stable string).
+   * Including `user` caused infinite reload: /me updates user → effect re-runs →
+   * previous fetch cleanup sets cancelled=true → finally skips setLoading(false) → skeleton forever.
+   */
   useEffect(() => {
     let cancelled = false;
+
     async function load() {
       if (!accessToken) {
         setLoading(false);
         return;
       }
+
       setLoading(true);
       setError("");
+
       try {
-        // Fetch tests
-        const data = await apiFetch("/tests", { token: accessToken });
-        if (!cancelled) setTests(data.items || []);
-        // Fetch user info (assume /me endpoint or from redux user)
-        // If user object has isPremium and testsAttempted, use it
-        if (user) {
-          setIsPremium(!!user.isPremium);
-          setTestsAttempted(user.testsAttempted || 0);
-        } else {
-          // fallback: fetch /me if needed
-          try {
-            const me = await apiFetch("/auth/me", { token: accessToken });
-            setIsPremium(!!me.isPremium);
-            setTestsAttempted(me.testsAttempted || 0);
-          } catch {}
+        if (import.meta.env.DEV) {
+          // eslint-disable-next-line no-console
+          console.log("[TestSelection] Fetching tests from /api/tests …");
+        }
+
+        const data = await apiFetch("/api/tests", { token: accessToken });
+
+        if (import.meta.env.DEV) {
+          // eslint-disable-next-line no-console
+          console.log("[TestSelection] Tests API response:", data);
+        }
+
+        const list = normalizeTestsListResponse(data);
+        if (!cancelled) setTests(list);
+
+        try {
+          const me = await apiFetch("/api/auth/me", { token: accessToken });
+          if (!cancelled && me?.user) {
+            dispatch(
+              updatePaymentState({
+                isPremium: me.user.isPremium,
+                purchasedTests: me.user.purchasedTests,
+                testsAttempted: me.user.testsAttempted
+              })
+            );
+            setIsPremium(!!me.user.isPremium);
+            setTestsAttempted(me.user.testsAttempted || 0);
+          }
+        } catch {
+          if (!cancelled) {
+            const u = user;
+            if (u) {
+              setIsPremium(!!u.isPremium);
+              setTestsAttempted(u.testsAttempted || 0);
+            }
+          }
         }
       } catch (e) {
-        if (!cancelled) setError(e.message);
+        if (!cancelled) {
+          const msg = e.message || "Failed to load tests";
+          setError(msg);
+          setTests([]);
+          toast.error(msg);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
+
     load();
     return () => {
       cancelled = true;
     };
-  }, [accessToken, user]);
+  }, [accessToken, dispatch]);
 
   const filtered = useMemo(() => {
+    if (!Array.isArray(tests)) return [];
     if (filter === "all") return tests;
     return tests.filter((t) => normalizeExam(t.exam) === filter);
   }, [tests, filter]);
@@ -94,8 +138,120 @@ export function TestSelectionPage() {
     );
   }
 
-  // Free limit logic
   const freeLimitReached = !isPremium && testsAttempted >= 2;
+
+  const handlePayment = async (type, testId = null) => {
+    try {
+      setStartBusy(true);
+      setError("");
+
+      const orderRes = await apiFetch("/api/payment/create-order", {
+        method: "POST",
+        token: accessToken,
+        body: { type, testId }
+      });
+
+      // eslint-disable-next-line no-console
+      console.log("[Razorpay] Order response:", orderRes);
+
+      if (!orderRes.success || !orderRes.order || !orderRes.order.id) {
+        throw new Error(orderRes?.message || "Could not create order or missing order_id");
+      }
+
+      let keyData = null;
+      if (!orderRes.key && !orderRes.key_id) {
+        keyData = await apiFetch("/api/payment/get-key", { token: accessToken });
+        if (!keyData.success || !keyData.key) throw new Error("Could not retrieve payment keys");
+      } else {
+        keyData = { key: orderRes.key || orderRes.key_id, mode: orderRes.mode };
+      }
+
+      if (keyData.mode === "live" && import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
+        console.warn("[Razorpay] Live key in dev — use rzp_test_* for local test payments.");
+        toast("Live Razorpay key in development. Prefer rzp_test_* keys.", { icon: "⚠️" });
+      }
+
+      const publicKey = resolveRazorpayPublicKey(orderRes, keyData);
+      if (!publicKey) throw new Error("Missing Razorpay public key");
+
+      const description = type === "full" ? "Unlock All Tests" : "Unlock Single Test";
+
+      const options = buildRazorpayCheckoutOptions({
+        key: publicKey,
+        order: orderRes.order,
+        name: "ExamEdge",
+        description,
+        user,
+        onDismiss: () => {
+          // eslint-disable-next-line no-console
+          console.log("[Razorpay] Checkout closed");
+          toast("Checkout closed", { icon: "ℹ️" });
+        },
+        handler: async function (response) {
+          // eslint-disable-next-line no-console
+          console.log("[Razorpay] Payment success:", response);
+          try {
+            const verifyRes = await apiFetch("/api/payment/verify-payment", {
+              method: "POST",
+              token: accessToken,
+              body: {
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                type: orderRes.type,
+                testId: orderRes.testId
+              }
+            });
+
+            if (verifyRes.success || verifyRes.ok) {
+              dispatch(
+                updatePaymentState({
+                  isPremium: verifyRes.isPremium,
+                  purchasedTests: verifyRes.purchasedTests
+                })
+              );
+              setIsPremium(!!verifyRes.isPremium);
+              // The user state is managed by Redux, so mutating user.purchasedTests directly throws an error.
+              // We rely on the updatePaymentState dispatch above to update the Redux state.
+              toast.success("Payment successful! You can now start the test.");
+            } else {
+              const msg = "Payment verification failed";
+              toast.error(msg);
+              setError(msg);
+            }
+          } catch (e) {
+            const msg = e.message || "Payment verification error";
+            toast.error(msg);
+            setError(msg);
+          }
+        }
+      });
+
+      // eslint-disable-next-line no-console
+      console.log("[Razorpay] Checkout options:", {
+        ...options,
+        key: options.key ? `${String(options.key).slice(0, 10)}…` : ""
+      });
+
+      const rzp = new window.Razorpay(options);
+      rzp.on("payment.failed", function (response) {
+        logRazorpayFailure("TestSelectionPage", response);
+        const msg = razorpayFailureMessage(response);
+        toast.error(msg);
+        setError(msg);
+      });
+      rzp.open();
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error("[Razorpay] handlePayment error:", e);
+      const msg = e.message || "Payment initiation failed";
+      toast.error(msg);
+      setError(msg);
+    } finally {
+      setStartBusy(false);
+    }
+  };
 
   return (
     <div className="container-centered py-8">
@@ -106,13 +262,15 @@ export function TestSelectionPage() {
         </p>
       </div>
 
-      {freeLimitReached && (
+      {freeLimitReached && !isPremium && (
         <div className="mb-6">
           <Alert variant="warning">
             <div className="font-semibold mb-1">Free Limit Reached</div>
             <div>You have used all 2 of your free mock tests. Upgrade to Premium to access all tests permanently.</div>
             <div className="mt-4">
-              <Button variant="primary">Unlock All Tests for ₹299</Button>
+              <Button variant="primary" onClick={() => handlePayment("full")}>
+                Unlock All Tests for ₹299
+              </Button>
             </div>
           </Alert>
         </div>
@@ -153,13 +311,42 @@ export function TestSelectionPage() {
             </Card>
           ))}
         </div>
-      ) : filtered.length ? (
+      ) : error ? (
+        <Card className="border-red-200 bg-red-50/50">
+          <CardBody className="py-10 text-center">
+            <h2 className="text-lg font-semibold text-red-900 mb-2">Could not load tests</h2>
+            <p className="text-red-800 text-sm mb-4">{error}</p>
+            <p className="text-secondary-600 text-sm mb-4">
+              Check that the backend is running, <code className="bg-white px-1 rounded">GET /api/tests</code> returns JSON,
+              and your session is valid.
+            </p>
+            <Button variant="primary" onClick={() => window.location.reload()}>
+              Retry
+            </Button>
+          </CardBody>
+        </Card>
+      ) : !tests.length ? (
+        <Card>
+          <CardBody className="py-12 text-center">
+            <h2 className="text-lg font-semibold text-secondary-900 mb-2">No tests available</h2>
+            <p className="text-secondary-600 text-sm max-w-lg mx-auto">
+              The server returned an empty list. Seed or create tests in MongoDB (active tests) or use the admin panel to
+              add tests.
+            </p>
+          </CardBody>
+        </Card>
+      ) : !filtered.length ? (
+        <Card>
+          <CardBody className="py-12 text-center">
+            <p className="text-secondary-600">No tests match this filter. Try &quot;All Exams&quot;.</p>
+          </CardBody>
+        </Card>
+      ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((t) => {
-            // If free limit reached and not premium, show unlock button
-            const locked = freeLimitReached && !isPremium;
+            const id = t._id ?? t.id;
             return (
-              <Card key={t._id} className="p-5 flex flex-col justify-between">
+              <Card key={String(id)} className="p-5 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <div>
@@ -189,22 +376,20 @@ export function TestSelectionPage() {
                   {t.description && <div className="text-sm text-secondary-600 mb-2">{t.description}</div>}
                 </div>
                 <div>
-                  {locked ? (
-                    <Button variant="primary" className="w-full">Unlock for ₹99</Button>
+                  {freeLimitReached && !isPremium && !(user?.purchasedTests || []).some((p) => String(p) === String(id)) ? (
+                    <Button variant="primary" className="w-full" onClick={() => handlePayment("single", id)} disabled={startBusy}>
+                      Unlock for ₹99
+                    </Button>
                   ) : (
-                    <Button variant="primary" className="w-full" onClick={() => setSelectedTest(t)}>Start Test</Button>
+                    <Button variant="primary" className="w-full" onClick={() => setSelectedTest({ ...t, _id: id })} disabled={startBusy}>
+                      Start Test
+                    </Button>
                   )}
                 </div>
               </Card>
             );
           })}
         </div>
-      ) : (
-        <Card>
-          <CardBody className="py-12 text-center">
-            <p className="text-secondary-600">No tests found for this exam.</p>
-          </CardBody>
-        </Card>
       )}
 
       <Modal
@@ -240,13 +425,10 @@ export function TestSelectionPage() {
         submitLabel={startBusy ? "Starting..." : "Start"}
         closeLabel="Cancel"
       >
-        <p className="text-sm text-secondary-700">
-          Are you sure you want to start this test? Timer will begin immediately.
-        </p>
+        <p className="text-sm text-secondary-700">Are you sure you want to start this test? Timer will begin immediately.</p>
       </Modal>
     </div>
   );
 }
 
 export default TestSelectionPage;
-

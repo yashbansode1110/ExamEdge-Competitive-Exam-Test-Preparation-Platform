@@ -45,6 +45,10 @@ ExamEdge bridges the gap between practice and perfection. It offers a secure, fe
 * **Visual Data**: Rendered using Recharts to present intuitive score trends and subject accuracy charts.
 * **Progress Tracking**: Features a heat map of weak topics paired with AI-generated insights for targeted improvement.
 
+### 💳 8. Premium Subscriptions & Payments
+* **Paywall Enforcement**: Allows a limit of 2 free tests, accurately tracking attempts and encouraging upgrades.
+* **Razorpay Integration**: Secure, hybrid checkout process utilizing Razorpay for seamless test and subscription purchases.
+
 ---
 
 ## 📸 Screenshots
@@ -97,7 +101,7 @@ npm install
 ```
 
 **Frontend:**
-: ```bash
+```bash
 cd ../frontend
 npm install
 ```
@@ -140,6 +144,10 @@ CLIENT_URL=http://localhost:5173
 
 # AI Integration
 GEMINI_API_KEY=your_google_gemini_api_key
+
+# Payment Gateway
+RAZORPAY_KEY_ID=your_razorpay_key_id
+RAZORPAY_KEY_SECRET=your_razorpay_secret
 ```
 
 ---
@@ -183,6 +191,7 @@ The backend is structured around a RESTful architecture:
 *   **`/api/questions`**: Bulk uploading questions, standard CRUD operations for the question bank.
 *   **`/api/analytics`**: Submitting test attempts, fetching user history and performance metrics.
 *   **`/api/ai`**: Post-exam processing for Gemini-based insights and recommendations.
+*   **`/api/payment`**: Order creation, signature verification, and Razorpay webhook handling.
 
 ---
 

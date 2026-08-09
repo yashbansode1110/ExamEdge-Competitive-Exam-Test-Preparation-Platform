@@ -8,7 +8,7 @@ import { persistCheatEventsFromAutosave } from "./cheatingController.js";
 export async function getTests(req, res, next) {
   try {
     const items = await listTests();
-    res.json({ ok: true, items });
+    res.json({ ok: true, success: true, items, tests: items });
   } catch (e) {
     next(e);
   }

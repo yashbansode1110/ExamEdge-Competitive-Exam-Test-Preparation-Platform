@@ -570,6 +570,7 @@ export function ExamInterfacePageUI() {
         },
       });
       localStorage.removeItem(localBackupKey);
+      window.dispatchEvent(new CustomEvent("examedge-analytics-refresh"));
       nav(`/result/${data?.result?.attemptId || data?.attemptId || currentAttempt.id}`);
     } catch (e) {
       setError(e.message);
@@ -770,9 +771,22 @@ export function ExamInterfacePageUI() {
     } else {
       if (canGoNext) {
         onNext();
+      } else {
+        // Automatically switch to next section if available
+        const currentSecIndex = sections.findIndex((s) => s.sectionId === activeSectionId);
+        if (currentSecIndex >= 0 && currentSecIndex < sections.length - 1) {
+          const nextSec = sections[currentSecIndex + 1];
+          onSwitchSection(nextSec.sectionId);
+          // Find first question of nextSec
+          const allowed = new Set(nextSec.subjects);
+          const firstIdx = questions.findIndex(q => allowed.has(q.subject));
+          if (firstIdx !== -1) {
+            goToQuestion(firstIdx);
+          }
+        }
       }
     }
-  }, [currentIndex, questions.length, isMht, isMhtPcm, mhtCanGoNext, mhtOnNext, canGoNext, onNext]);
+  }, [currentIndex, questions, isMht, isMhtPcm, mhtCanGoNext, mhtOnNext, canGoNext, onNext, sections, activeSectionId, onSwitchSection, goToQuestion]);
 
   const submitPcSection = useCallback(
     async ({ reason } = { reason: "manual" }) => {

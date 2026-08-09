@@ -62,7 +62,10 @@ const UserSchema = new Schema(
     refreshTokens: { type: [RefreshTokenSchema], default: [] },
     student: { type: StudentProfileSchema, default: undefined },
     failedLoginCount: { type: Number, default: 0, min: 0 },
-    lockUntil: { type: Date, default: undefined, index: true }
+    lockUntil: { type: Date, default: undefined, index: true },
+    testsAttempted: { type: Number, default: 0 },
+    purchasedTests: [{ type: mongoose.Schema.Types.ObjectId, ref: "Test" }],
+    isPremium: { type: Boolean, default: false }
   },
   { timestamps: true }
 );
