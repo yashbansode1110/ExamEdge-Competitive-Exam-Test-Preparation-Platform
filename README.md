@@ -37,7 +37,7 @@ ExamEdge bridges the gap between practice and perfection. It offers a secure, fe
 * **Automated Penalty**: Auto-submits the exam immediately after 3 warnings are triggered, maintaining exam integrity.
 
 ### 🤖 6. AI Features
-* **Smart Analytics**: Leverages the Google Gemini API to generate comprehensive performance analysis for students.
+* **Smart Analytics**: Leverages the Groq API (powered by Llama 3) to generate comprehensive performance analysis for students.
 * **Personalized Insights**: Highlights specific strengths, pinpoints weak topics, and provides actionable study recommendations.
 * **Fault Tolerance**: Includes an automatic fallback system to ensure the process continues gracefully if the AI service is temporarily unavailable.
 
@@ -77,7 +77,7 @@ ExamEdge bridges the gap between practice and perfection. It offers a secure, fe
 * **MongoDB** (with Mongoose ODM)
 
 ### AI Integration
-* **Google Gemini API** (for advanced text generation and data analysis)
+* **Groq API** (Llama 3 for blazing fast text generation and data analysis)
 
 ---
 
@@ -143,7 +143,7 @@ PORT=5000
 CLIENT_URL=http://localhost:5173
 
 # AI Integration
-GEMINI_API_KEY=your_google_gemini_api_key
+GROQ_API_KEY=your_groq_api_key
 
 # Payment Gateway
 RAZORPAY_KEY_ID=your_razorpay_key_id
@@ -162,7 +162,7 @@ ExamEdge/
 │   ├── middlewares/     # Auth & error handling
 │   ├── models/          # MongoDB Schemas (User, Question, Test, Attempt)
 │   ├── routes/          # Express API route definitions
-│   ├── services/        # External services (Gemini AI parsing)
+│   ├── services/        # External services (Groq AI parsing)
 │   └── server.js        # Main entry point
 │
 └── frontend/
@@ -190,7 +190,7 @@ The backend is structured around a RESTful architecture:
 *   **`/api/tests`**: Generating smart tests, listing available tests, fetching test details.
 *   **`/api/questions`**: Bulk uploading questions, standard CRUD operations for the question bank.
 *   **`/api/analytics`**: Submitting test attempts, fetching user history and performance metrics.
-*   **`/api/ai`**: Post-exam processing for Gemini-based insights and recommendations.
+*   **`/api/ai`**: Post-exam processing for Groq-based insights and recommendations.
 *   **`/api/payment`**: Order creation, signature verification, and Razorpay webhook handling.
 
 ---
@@ -200,7 +200,7 @@ The backend is structured around a RESTful architecture:
 1.  **Test Origination**: An Administrator uploads a CSV/JSON of questions to populate the database and utilizes the "Smart Generator" to assemble a structured test.
 2.  **Exam Attempt**: A Student logs in, navigates to the test, agrees to dynamic instructions, and enters the secure, fullscreen exam interface. 
 3.  **Real-Time Processing**: The interface handles complex state management for navigation, timers, and anti-cheat tracking.
-4.  **Submission & AI Gen**: Upon submission, the backend evaluates the attempt and simultaneously pings the Gemini API to construct personalized analytics.
+4.  **Submission & AI Gen**: Upon submission, the backend evaluates the attempt and simultaneously pings the Groq API to construct personalized analytics.
 5.  **Review**: The student is immediately redirected to their analytics dashboard to visualize scores and study recommendations.
 
 ---
